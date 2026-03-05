@@ -6,14 +6,28 @@ export interface VehicleType {
 }
 
 export interface VehicleSummary {
-  name: string;
-  thumbnailUrl: string;
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  type: string;
+  rentalPricePerDay: number;
+  thumbnailUrl?: string;
+  isAvailable: boolean;
 }
 
 export interface Vehicle {
   id: string;
-  name: string;
-  thumbnailUrl: string;
+  make: string;
+  model: string;
+  year: number;
+  type: string;
+  description: string;
+  rentalPricePerDay: number;
+  imageUrls: string[];
+  isAvailable: boolean;
+  isUnderMaintenance: boolean;
+  isAdminHeld: boolean;
   vehicleTypeId: string;
 }
 
