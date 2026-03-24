@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, UserRole } from '../types';
+import { hydrateUserFromCache, saveUserToCache } from '../utils/profileCache';
 
 interface AuthState {
     user: User | null;
@@ -19,9 +20,17 @@ export const useAuthStore = create<AuthState>()(
             token: null,
             role: null,
             isAuthenticated: false,
-            setAuth: (user, token, role) => set({ user, token, role, isAuthenticated: true }),
+            setAuth: (user, token, role) => {
+                const hydratedUser = hydrateUserFromCache(user);
+                saveUserToCache(hydratedUser);
+                set({ user: hydratedUser, token, role, isAuthenticated: true });
+            },
             logout: () => set({ user: null, token: null, role: null, isAuthenticated: false }),
-            updateUser: (user) => set({ user }),
+            updateUser: (user) => {
+                const hydratedUser = hydrateUserFromCache(user);
+                saveUserToCache(hydratedUser);
+                set({ user: hydratedUser });
+            },
         }),
         {
             name: 'auth-storage',
