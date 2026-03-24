@@ -1,31 +1,30 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import type { User, UserRole } from '../types';
 
-interface AuthStore {
-  token: string | null;
-  userId: string | null;
-  role: string | null;
-  isAuthenticated: boolean;
-  login: (token: string, userId: string, role: string) => void;
-  logout: () => void;
+interface AuthState {
+    user: User | null;
+    token: string | null;
+    role: UserRole | null;
+    isAuthenticated: boolean;
+    setAuth: (user: User, token: string, role: UserRole) => void;
+    logout: () => void;
+    updateUser: (user: User) => void;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
-  token: localStorage.getItem('token'),
-  userId: localStorage.getItem('userId'),
-  role: localStorage.getItem('role'),
-  isAuthenticated: !!localStorage.getItem('token'),
-  
-  login: (token: string, userId: string, role: string) => {
-    localStorage.setItem('token', token);
-    localStorage.setItem('userId', userId);
-    localStorage.setItem('role', role);
-    set({ token, userId, role, isAuthenticated: true });
-  },
-  
-  logout: () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('role');
-    set({ token: null, userId: null, role: null, isAuthenticated: false });
-  },
-}));
+export const useAuthStore = create<AuthState>()(
+    persist(
+        (set) => ({
+            user: null,
+            token: null,
+            role: null,
+            isAuthenticated: false,
+            setAuth: (user, token, role) => set({ user, token, role, isAuthenticated: true }),
+            logout: () => set({ user: null, token: null, role: null, isAuthenticated: false }),
+            updateUser: (user) => set({ user }),
+        }),
+        {
+            name: 'auth-storage',
+        }
+    )
+);
