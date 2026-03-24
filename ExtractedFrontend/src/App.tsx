@@ -1,9 +1,19 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
-import MainLayout from './components/MainLayout';
+import MainLayout from './components/layout/MainLayout';
 import Home from './pages/Home';
+import Login from './pages/Login';
+import Register from './pages/Register';
 import VehicleListing from './pages/VehicleListing';
+import VehicleDetails from './pages/VehicleDetails';
+import BookingFlow from './pages/BookingFlow';
+import Profile from './pages/Profile';
+import AdminDashboard from './pages/AdminDashboard';
+import BookingRequests from './pages/BookingRequests';
+import VehicleManagement from './pages/VehicleManagement';
+import AuditLogs from './pages/AuditLogs';
+import { useAuthStore } from './store/authStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -14,6 +24,13 @@ const queryClient = new QueryClient({
   },
 });
 
+const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
+  const { role, isAuthenticated } = useAuthStore();
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (allowedRoles && role && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
+  return <>{children}</>;
+};
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -22,6 +39,43 @@ function App() {
           <Route path="/" element={<MainLayout />}>
             <Route index element={<Home />} />
             <Route path="vehicles" element={<VehicleListing />} />
+            <Route path="vehicles/:id" element={<VehicleDetails />} />
+            <Route path="login" element={<Login />} />
+            <Route path="register" element={<Register />} />
+
+            {/* Customer Protected Routes */}
+            <Route path="booking" element={
+              <ProtectedRoute allowedRoles={['CUSTOMER']}>
+                <BookingFlow />
+              </ProtectedRoute>
+            } />
+            <Route path="profile" element={
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'ADMIN', 'SPECIAL_ADMIN']}>
+                <Profile />
+              </ProtectedRoute>
+            } />
+
+            {/* Admin Protected Routes */}
+            <Route path="admin" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
+                <AdminDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="admin/bookings" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
+                <BookingRequests />
+              </ProtectedRoute>
+            } />
+            <Route path="admin/vehicles" element={
+              <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
+                <VehicleManagement />
+              </ProtectedRoute>
+            } />
+            <Route path="admin/logs" element={
+              <ProtectedRoute allowedRoles={['SPECIAL_ADMIN']}>
+                <AuditLogs />
+              </ProtectedRoute>
+            } />
           </Route>
         </Routes>
       </Router>

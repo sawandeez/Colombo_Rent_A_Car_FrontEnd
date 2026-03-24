@@ -1,20 +1,24 @@
 export type UserRole = 'CUSTOMER' | 'ADMIN' | 'SPECIAL_ADMIN';
 
-export interface VehicleType {
+export interface User {
   id: string;
+  email: string;
   name: string;
+  phone: string;
+  district: string;
+  city: string;
+  role: UserRole;
+  documentsVerified: boolean;
 }
 
-export interface VehicleSummary {
-  id: string;
-  make: string;
-  model: string;
-  year: number;
-  type: string;
-  rentalPricePerDay: number;
-  thumbnailUrl?: string;
-  isAvailable: boolean;
+export interface AuthResponse {
+  token: string;
+  role: string;
 }
+
+export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+
+export type BookingAdminStatus = BookingStatus;
 
 export interface Vehicle {
   id: string;
@@ -28,18 +32,63 @@ export interface Vehicle {
   isAvailable: boolean;
   isUnderMaintenance: boolean;
   isAdminHeld: boolean;
-  vehicleTypeId: string;
 }
 
-export interface AuthResponse {
-  token: string;
-  role: string;
-}
-
-export interface User {
+export interface Booking {
   id: string;
-  email: string;
-  name: string;
-  phone: string;
-  role: UserRole;
+  userId: string;
+  vehicleId: string;
+  startDate: string;
+  endDate: string;
+  bookingTime: string;
+  status: BookingStatus;
+  advanceAmount?: number;
+  advancePaid?: boolean;
+  rejectionReason?: string;
+  vehicle?: Vehicle; // Nested DTO from backend
 }
+
+export interface BookingAdminCustomer {
+  id?: string;
+  name?: string;
+  email?: string;
+  username?: string;
+}
+
+export interface BookingAdminVehicle {
+  id?: string;
+  make?: string;
+  model?: string;
+}
+
+export interface BookingAdminDTO {
+  id?: string;
+  bookingId?: string;
+  status: BookingAdminStatus;
+  startDate?: string;
+  endDate?: string;
+  pickupDateTime?: string;
+  returnDateTime?: string;
+  bookingTime?: string;
+  createdAt?: string;
+  totalPrice?: number;
+  totalAmount?: number;
+  userId?: string;
+  customerName?: string;
+  customerEmail?: string;
+  user?: BookingAdminCustomer;
+  vehicleId?: string;
+  vehicleName?: string;
+  vehicle?: BookingAdminVehicle;
+  rejectionReason?: string;
+}
+
+export interface PaginatedResponse<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  number: number;
+  size: number;
+}
+
+export type BookingAdminListResponse = BookingAdminDTO[] | PaginatedResponse<BookingAdminDTO>;
