@@ -9,6 +9,7 @@ import VehicleListing from './pages/VehicleListing';
 import VehicleDetails from './pages/VehicleDetails';
 import BookingFlow from './pages/BookingFlow';
 import Profile from './pages/Profile';
+import EditProfile from './pages/EditProfile';
 import AdminDashboard from './pages/AdminDashboard';
 import BookingRequests from './pages/BookingRequests';
 import VehicleManagement from './pages/VehicleManagement';
@@ -52,6 +53,11 @@ function App() {
             <Route path="profile" element={
               <ProtectedRoute allowedRoles={['CUSTOMER', 'ADMIN', 'SPECIAL_ADMIN']}>
                 <Profile />
+              </ProtectedRoute>
+            } />
+            <Route path="profile/edit" element={
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'ADMIN', 'SPECIAL_ADMIN']}>
+                <EditProfile />
               </ProtectedRoute>
             } />
 
