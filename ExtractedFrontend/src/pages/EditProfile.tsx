@@ -1,11 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Controller, useForm } from 'react-hook-form';
-import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import 'react-phone-number-input/style.css';
-import { ArrowLeft, Mail, MapPin, Save, User as UserIcon } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { ArrowLeft, Mail, MapPin, Phone, Save, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { AxiosError } from 'axios';
 import api from '../services/api';
@@ -25,16 +21,7 @@ const EditProfile: React.FC = () => {
     const { user, updateUser } = useAuthStore();
     const [isSaving, setIsSaving] = React.useState(false);
 
-    const { control, register, handleSubmit, formState: { errors }, reset } = useForm<EditProfileForm>({
-        resolver: zodResolver(z.object({
-            name: z.string().min(2, 'Full name is required'),
-            email: z.string().email('Invalid email address'),
-            phone: z.string().refine((value) => isValidPhoneNumber(value || ''), {
-                message: 'Invalid international phone number',
-            }),
-            district: z.string().min(2, 'District is required'),
-            city: z.string().min(2, 'City is required'),
-        })),
+    const { register, handleSubmit, formState: { errors }, reset } = useForm<EditProfileForm>({
         defaultValues: {
             name: user?.name || '',
             email: user?.email || '',
@@ -56,9 +43,8 @@ const EditProfile: React.FC = () => {
 
     const onSubmit = async (data: EditProfileForm) => {
         setIsSaving(true);
-
         try {
-            const response = await api.put<User>('/profile', { ...data, phone: data.phone });
+            const response = await api.put<User>('/profile', data);
             updateUser(response.data);
             toast.success('Profile updated successfully');
             navigate('/profile');
@@ -114,19 +100,14 @@ const EditProfile: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-surface-300">Phone</label>
-                            <Controller
-                                name="phone"
-                                control={control}
-                                render={({ field }) => (
-                                    <PhoneInput
-                                        {...field}
-                                        international
-                                        defaultCountry="LK"
-                                        className="w-full max-w-sm phone-input"
-                                        placeholder="Enter phone number"
-                                    />
-                                )}
-                            />
+                            <div className="relative">
+                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-500" />
+                                <input
+                                    {...register('phone', { required: 'Phone is required' })}
+                                    className="input-field pl-12"
+                                    placeholder="+94 77 123 4567"
+                                />
+                            </div>
                             {errors.phone && <p className="text-red-500 text-xs">{errors.phone.message}</p>}
                         </div>
 

@@ -509,37 +509,15 @@ const BookingFlow: React.FC = () => {
                                                     --rdp-outline: 2px solid var(--color-primary-500, #ec4899);
                                                     --rdp-outline-selected: 2px solid var(--rdp-accent-color);
                                                 }
-
-                                                /* Already booked dates */
+                                                .rdp-day_selected {
+                                                    color: white !important;
+                                                    font-weight: bold;
+                                                }
                                                 .rdp-day_disabled {
                                                     opacity: 1 !important;
-                                                    color: white !important;
-                                                    background-color: rgba(239, 68, 68, 0.35) !important;
-                                                    border-radius: 0.6rem !important;
-                                                    text-decoration: none !important;
-                                                    border: 1px solid rgba(239, 68, 68, 0.8) !important;
-                                                }
-
-                                                /* New selected range dates (must show number clearly) */
-                                                .rdp-day_selected,
-                                                .rdp-day_range_start,
-                                                .rdp-day_range_end,
-                                                .rdp-day_range_middle {
-                                                    color: #000 !important;
-                                                    background-color: #34d399 !important;
-                                                    font-weight: bold !important;
-                                                    border: 1px solid #10b981 !important;
-                                                }
-
-                                                .rdp-day_selected:not(.rdp-day_disabled),
-                                                .rdp-day_range_start:not(.rdp-day_disabled),
-                                                .rdp-day_range_end:not(.rdp-day_disabled),
-                                                .rdp-day_range_middle:not(.rdp-day_disabled) {
-                                                    color: #000 !important;
-                                                }
-
-                                                .rdp-day:not(.rdp-day_disabled) {
-                                                    text-decoration: none;
+                                                    color: #ef4444 !important;
+                                                    background-color: rgba(239, 68, 68, 0.1) !important;
+                                                    text-decoration: line-through;
                                                 }
                                             `}</style>
                                             <p className="text-sm text-surface-400 mb-6 font-medium bg-red-500/10 text-red-400 px-4 py-2 rounded-full inline-block border border-red-500/20">
