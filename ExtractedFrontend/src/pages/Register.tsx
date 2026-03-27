@@ -1,10 +1,12 @@
 import React from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
+import PhoneInput, { isValidPhoneNumber } from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Phone, MapPin, UserPlus, ArrowLeft } from 'lucide-react';
+import { User, Mail, Lock, MapPin, UserPlus, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
 
@@ -12,11 +14,13 @@ const registerSchema = z.object({
     name: z.string().min(2, 'Name must be at least 2 characters'),
     email: z.string().email('Invalid email address'),
     password: z.string().min(8, 'Password must be at least 8 characters'),
-    phone: z.string().min(10, 'Invalid phone number'),
-    district: z.string().refine(val => val.toLowerCase() === 'colombo', {
-        message: 'Registrations are currently limited to Colombo district only',
+    age: z.number().int('Age must be a valid number').min(25, 'You must be at least 25 years old'),
+    phone: z.string().refine((value) => isValidPhoneNumber(value || ''), {
+        message: 'Enter a valid phone number with country code',
     }),
+    district: z.literal('Colombo'),
     city: z.string().min(2, 'City is required'),
+    address: z.string().min(5, 'Address is required'),
 });
 
 type RegisterForm = z.infer<typeof registerSchema>;
@@ -25,17 +29,25 @@ const Register: React.FC = () => {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = React.useState(false);
 
-    const { register, handleSubmit, formState: { errors } } = useForm<RegisterForm>({
+    const { register, control, handleSubmit, formState: { errors } } = useForm<RegisterForm>({
         resolver: zodResolver(registerSchema),
         defaultValues: {
-            district: 'Colombo'
+            district: 'Colombo',
+            phone: '',
+            age: 25,
+            city: '',
+            address: '',
         }
     });
 
     const onSubmit = async (data: RegisterForm) => {
         setIsLoading(true);
         try {
-            await api.post('/auth/register', data);
+            await api.post('/auth/register', {
+                ...data,
+                district: 'Colombo',
+                city: `${data.address}, ${data.city}`,
+            });
             toast.success('Registration successful! Please login.');
             navigate('/login');
         } catch (error: any) {
@@ -94,11 +106,35 @@ const Register: React.FC = () => {
                         {/* Phone */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-surface-300">Phone Number</label>
-                            <div className="relative">
-                                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-500" />
-                                <input {...register('phone')} placeholder="+94 77 123 4567" className="input-field pl-12" />
-                            </div>
+                            <Controller
+                                name="phone"
+                                control={control}
+                                render={({ field }) => (
+                                    <PhoneInput
+                                        {...field}
+                                        international
+                                        defaultCountry="LK"
+                                        countryCallingCodeEditable={false}
+                                        className="phone-input"
+                                        placeholder="Enter phone number"
+                                    />
+                                )}
+                            />
                             {errors.phone && <p className="text-red-500 text-xs">{errors.phone.message}</p>}
+                        </div>
+
+                        {/* Age */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-surface-300">Age</label>
+                            <input
+                                type="number"
+                                min={25}
+                                {...register('age', { valueAsNumber: true })}
+                                className="input-field"
+                                placeholder="Enter your age"
+                            />
+                            <p className="text-xs text-surface-400">You must be at least 25 years old to request a vehicle.</p>
+                            {errors.age && <p className="text-red-500 text-xs">{errors.age.message}</p>}
                         </div>
 
                         {/* Password */}
@@ -111,21 +147,32 @@ const Register: React.FC = () => {
                             {errors.password && <p className="text-red-500 text-xs">{errors.password.message}</p>}
                         </div>
 
-                        {/* District (Readonly-ish for now as per project scope) */}
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-surface-300">District</label>
+                        {/* Address */}
+                        <div className="space-y-2 col-span-1 md:col-span-2">
+                            <label className="text-sm font-medium text-surface-300">Address</label>
                             <div className="relative">
                                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-500" />
-                                <input {...register('district')} placeholder="Colombo" className="input-field pl-12 bg-white/5 opacity-80" />
+                                <input {...register('address')} placeholder="123 Main St" className="input-field pl-12" />
                             </div>
-                            {errors.district && <p className="text-red-500 text-xs">{errors.district.message}</p>}
+                            {errors.address && <p className="text-red-500 text-xs">{errors.address.message}</p>}
                         </div>
 
                         {/* City */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-surface-300">City</label>
-                            <input {...register('city')} placeholder="Kollupitiya" className="input-field" />
+                            <input {...register('city')} placeholder="Colombo" className="input-field" />
                             {errors.city && <p className="text-red-500 text-xs">{errors.city.message}</p>}
+                        </div>
+
+                        {/* District hardcoded to Colombo */}
+                        <input type="hidden" value="Colombo" {...register('district')} />
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-surface-300">District</label>
+                            <div className="relative">
+                                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-surface-500" />
+                                <input value="Colombo" readOnly className="input-field pl-12 bg-white/5 opacity-80 cursor-not-allowed" />
+                            </div>
+                            {errors.district && <p className="text-red-500 text-xs">{errors.district.message}</p>}
                         </div>
 
                         <button
