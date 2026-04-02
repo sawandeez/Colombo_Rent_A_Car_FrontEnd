@@ -1,0 +1,14 @@
+{
+	"name": "colombo-rent-a-car-frontend-root",
+	"private": true,
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"start": "npm run dev --prefix ExtractedFrontend",
+		"dev": "npm run dev --prefix ExtractedFrontend",
+		"build": "npm run build --prefix ExtractedFrontend",
+		"lint": "npm run lint --prefix ExtractedFrontend",
+		"preview": "npm run preview --prefix ExtractedFrontend"
+	}
+}
+
