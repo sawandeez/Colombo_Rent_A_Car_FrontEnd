@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Booking } from '../types';
-import { cn, formatDate } from '../utils';
+import { cn, formatDate, formatPrice } from '../utils';
 import { useAuthStore } from '../store/authStore';
 import { cancelBooking, getMyBookings } from '../services/bookings';
 import { initiatePayment, startPaymentCheckout } from '../services/paymentsApi';
@@ -185,6 +185,16 @@ const Profile: React.FC = () => {
                                                     <div className="text-[10px] text-surface-500 font-bold uppercase tracking-widest">Booking ID</div>
                                                     <div className="text-xs font-medium font-mono text-surface-300">#{booking.id?.slice(-8)?.toUpperCase() || 'N/A'}</div>
                                                 </div>
+                                                {booking.status === 'APPROVED' && (
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] text-surface-500 font-bold uppercase tracking-widest">Advance Amount</div>
+                                                        {typeof booking.advanceAmount === 'number' ? (
+                                                            <div className="text-xs font-bold text-emerald-400">{formatPrice(booking.advanceAmount)}</div>
+                                                        ) : (
+                                                            <div className="text-xs text-surface-500">Not set yet</div>
+                                                        )}
+                                                    </div>
+                                                )}
                                                 <div className="flex items-center gap-3">
                                                     {canAttemptPayment(booking) && (
                                                         <button

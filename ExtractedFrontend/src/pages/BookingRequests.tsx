@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Calendar,
     CheckCircle2,
+    DollarSign,
     Eye,
     ExternalLink,
     FileText,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
+import { setAdvanceAmount } from '../services/bookings';
 import type {
     BookingAdminDTO,
     BookingAdminListResponse,
@@ -142,6 +144,8 @@ const BookingRequests: React.FC = () => {
     const [toDate, setToDate] = React.useState('');
     const [page, setPage] = React.useState(1);
     const [selectedBooking, setSelectedBooking] = React.useState<BookingAdminDTO | null>(null);
+    const [advanceAmountInput, setAdvanceAmountInput] = React.useState('');
+    const [advanceCurrencyInput, setAdvanceCurrencyInput] = React.useState('LKR');
     const selectedCustomerId = selectedBooking ? getCustomerId(selectedBooking) : '';
     const needsCustomerDetailsFallback = Boolean(
         selectedBooking &&
@@ -167,6 +171,49 @@ const BookingRequests: React.FC = () => {
         },
         placeholderData: (previousData) => previousData,
     });
+
+    React.useEffect(() => {
+        if (selectedBooking) {
+            setAdvanceAmountInput(
+                selectedBooking.advanceAmount !== undefined ? String(selectedBooking.advanceAmount) : '',
+            );
+            setAdvanceCurrencyInput(selectedBooking.advanceCurrency || 'LKR');
+        }
+    }, [selectedBooking?.id]);
+
+    const advanceMutation = useMutation({
+        mutationFn: async ({ bookingId, amount, currency }: { bookingId: string; amount: number; currency: string }) =>
+            setAdvanceAmount(bookingId, amount, currency),
+        onSuccess: () => {
+            toast.success('Advance amount saved successfully.');
+            queryClient.invalidateQueries({ queryKey: ['admin-bookings-approvals'] });
+            if (selectedBooking) {
+                const parsed = parseFloat(advanceAmountInput);
+                setSelectedBooking({
+                    ...selectedBooking,
+                    advanceAmount: parsed,
+                    advanceCurrency: advanceCurrencyInput,
+                });
+            }
+        },
+        onError: (mutationError: unknown) => {
+            toast.error(getErrorMessage(mutationError));
+        },
+    });
+
+    const handleSetAdvanceAmount = () => {
+        if (!selectedBooking || !advanceAmountInput) return;
+        const amount = parseFloat(advanceAmountInput);
+        if (Number.isNaN(amount) || amount < 0) {
+            toast.error('Please enter a valid advance amount.');
+            return;
+        }
+        advanceMutation.mutate({
+            bookingId: getBookingId(selectedBooking),
+            amount,
+            currency: advanceCurrencyInput || 'LKR',
+        });
+    };
 
     const approveMutation = useMutation({
         mutationFn: async (bookingId: string) => api.patch(`/admin/bookings/${bookingId}/approve`),
@@ -606,6 +653,66 @@ const BookingRequests: React.FC = () => {
                                         <StatusBadge status={selectedBooking.status} />
                                     </div>
                                 </div>
+
+                                {selectedBooking.status === 'APPROVED' && (
+                                    <div className="glass-card !bg-white/5 !p-4 space-y-3">
+                                        <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
+                                            <DollarSign className="h-4 w-4" /> Advance Payment
+                                        </h4>
+                                        {typeof selectedBooking.advanceAmount === 'number' && (
+                                            <div className="text-xs text-emerald-400 font-medium">
+                                                Current: {selectedBooking.advanceAmount.toLocaleString()} {selectedBooking.advanceCurrency || 'LKR'}
+                                            </div>
+                                        )}
+                                        {(() => {
+                                            const total = getDisplayTotalPrice(selectedBooking);
+                                            const estimate = typeof total === 'number' ? Math.round(total * 0.25) : null;
+                                            return estimate !== null ? (
+                                                <div className="flex items-center justify-between bg-surface-800/60 rounded-lg px-3 py-2">
+                                                    <span className="text-[10px] text-surface-400 uppercase tracking-wider">
+                                                        System estimate (25%):&nbsp;
+                                                        <span className="text-surface-200 font-bold">{formatPrice(estimate)}</span>
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setAdvanceAmountInput(String(estimate))}
+                                                        className="text-primary-400 hover:text-primary-300 text-[10px] font-bold hover:underline ml-3"
+                                                    >
+                                                        Use
+                                                    </button>
+                                                </div>
+                                            ) : null;
+                                        })()}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={advanceAmountInput}
+                                                onChange={(e) => setAdvanceAmountInput(e.target.value)}
+                                                placeholder="Enter amount"
+                                                className="input-field flex-1"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={advanceCurrencyInput}
+                                                onChange={(e) => setAdvanceCurrencyInput(e.target.value.toUpperCase())}
+                                                placeholder="LKR"
+                                                className="input-field !w-24"
+                                                maxLength={3}
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleSetAdvanceAmount}
+                                            disabled={!advanceAmountInput || advanceMutation.isPending}
+                                            className="btn-primary !py-2 w-full text-xs flex items-center justify-center gap-2 disabled:opacity-50"
+                                        >
+                                            {advanceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                                            Save Advance Amount
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="glass-card !bg-white/5 !p-4 space-y-3">
                                     <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
