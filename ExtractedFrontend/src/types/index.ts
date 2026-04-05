@@ -16,7 +16,8 @@ export interface AuthResponse {
   role: string;
 }
 
-export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus = 'PENDING' | 'APPROVED' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+export type PaymentStatus = 'PENDING' | 'INITIATED' | 'SUCCESS' | 'FAILED' | 'CANCELLED';
 
 export type BookingAdminStatus = BookingStatus;
 
@@ -44,6 +45,8 @@ export interface Booking {
   status: BookingStatus;
   advanceAmount?: number;
   advancePaid?: boolean;
+  paymentStatus?: PaymentStatus | string;
+  paymentDate?: string;
   rejectionReason?: string;
   vehicle?: Vehicle; // Nested DTO from backend
 }

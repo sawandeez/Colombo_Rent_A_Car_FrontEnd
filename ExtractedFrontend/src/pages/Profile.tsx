@@ -13,6 +13,7 @@ import type { Booking } from '../types';
 import { cn, formatDate } from '../utils';
 import { useAuthStore } from '../store/authStore';
 import { cancelBooking, getMyBookings } from '../services/bookings';
+import { initiatePayment, startPaymentCheckout } from '../services/paymentsApi';
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     const styles = {
@@ -33,6 +34,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
 const Profile: React.FC = () => {
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
+    const [initiatingBookingId, setInitiatingBookingId] = React.useState<string | null>(null);
 
     const getApiErrorMessage = (error: unknown, fallback: string) => {
         const axiosError = error as AxiosError<{ message?: string }>;
@@ -59,8 +61,34 @@ const Profile: React.FC = () => {
         },
     });
 
-    const ongoingBookings = bookings.filter(b => ['PENDING', 'APPROVED'].includes(b.status));
-    const historyBookings = bookings.filter(b => !['PENDING', 'APPROVED'].includes(b.status));
+    const canAttemptPayment = (booking: Booking): boolean => {
+        const normalizedPayment = (booking.paymentStatus || '').toString().toUpperCase();
+        const alreadyPaid = booking.advancePaid === true || normalizedPayment === 'SUCCESS';
+
+        if (alreadyPaid) return false;
+        return ['APPROVED', 'CONFIRMED'].includes(booking.status);
+    };
+
+    const handlePayAdvance = async (booking: Booking) => {
+        setInitiatingBookingId(booking.id);
+
+        try {
+            const origin = window.location.origin;
+            const response = await initiatePayment(booking.id, {
+                returnUrl: `${origin}/payment/success?bookingId=${booking.id}`,
+                cancelUrl: `${origin}/payment/fail?bookingId=${booking.id}`,
+            });
+
+            startPaymentCheckout(response);
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(error, 'Unable to start payment. Please try again.'));
+        } finally {
+            setInitiatingBookingId(null);
+        }
+    };
+
+    const ongoingBookings = bookings.filter(b => ['PENDING', 'APPROVED', 'CONFIRMED'].includes(b.status));
+    const historyBookings = bookings.filter(b => !['PENDING', 'APPROVED', 'CONFIRMED'].includes(b.status));
 
     return (
         <div className="min-h-screen pb-20 pt-10">
@@ -142,7 +170,14 @@ const Profile: React.FC = () => {
                                                         <span>{formatDate(booking.startDate)} - {formatDate(booking.endDate)}</span>
                                                     </div>
                                                 </div>
-                                                <StatusBadge status={booking.status} />
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <StatusBadge status={booking.status} />
+                                                    {booking.paymentStatus && (
+                                                        <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-blue-500/20 bg-blue-500/10 text-blue-300">
+                                                            Payment: {booking.paymentStatus}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
 
                                             <div className="flex items-center justify-between">
@@ -151,6 +186,17 @@ const Profile: React.FC = () => {
                                                     <div className="text-xs font-medium font-mono text-surface-300">#{booking.id?.slice(-8)?.toUpperCase() || 'N/A'}</div>
                                                 </div>
                                                 <div className="flex items-center gap-3">
+                                                    {canAttemptPayment(booking) && (
+                                                        <button
+                                                            onClick={() => {
+                                                                void handlePayAdvance(booking);
+                                                            }}
+                                                            disabled={initiatingBookingId === booking.id}
+                                                            className="btn-primary !py-2 !px-3 text-[10px] font-bold disabled:opacity-60"
+                                                        >
+                                                            {initiatingBookingId === booking.id ? 'Starting...' : 'Pay Advance'}
+                                                        </button>
+                                                    )}
                                                     {booking.status === 'PENDING' && (
                                                         <button
                                                             onClick={() => cancelMutation.mutate(booking.id)}
