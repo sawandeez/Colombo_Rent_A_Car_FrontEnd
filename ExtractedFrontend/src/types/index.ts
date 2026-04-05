@@ -83,6 +83,8 @@ export interface BookingAdminDTO {
   vehicleId?: string;
   vehicleName?: string;
   vehicle?: BookingAdminVehicle;
+  advanceAmount?: number;
+  advanceCurrency?: string;
   rejectionReason?: string;
 }
 

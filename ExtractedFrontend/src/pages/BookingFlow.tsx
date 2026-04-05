@@ -426,10 +426,12 @@ const BookingFlow: React.FC = () => {
 
         setIsSubmitting(true);
         try {
+            const estimatedAdvanceAmount = Math.round((vehicle?.rentalPricePerDay ?? 0) * totalDays * 0.25);
             await api.post('/bookings', {
                 vehicleId,
                 startDate: dateRange?.from?.toISOString(),
                 endDate: dateRange?.to?.toISOString(),
+                estimatedAdvanceAmount,
             });
             toast.success('Booking requested successfully!');
             navigate('/profile');
