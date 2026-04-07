@@ -11,6 +11,7 @@ import toast from 'react-hot-toast';
 import api from '../services/api';
 import {
     downloadMyDocument,
+    DOCUMENT_PRIVACY_MESSAGE,
     listMyDocuments,
     uploadMyDocument,
     type MyDocumentCategory,
@@ -100,6 +101,9 @@ const BookingFlow: React.FC = () => {
     const [drivingLicensePreviewUrl, setDrivingLicensePreviewUrl] = React.useState<string | null>(null);
     const [isUploadingNic, setIsUploadingNic] = React.useState(false);
     const [isUploadingLicense, setIsUploadingLicense] = React.useState(false);
+    const [consentAccepted, setConsentAccepted] = React.useState(false);
+    const [consentValidationMessage, setConsentValidationMessage] = React.useState<string | null>(null);
+    const [uploadStatusMessage, setUploadStatusMessage] = React.useState<string | null>(null);
     const nicFrontInputRef = React.useRef<HTMLInputElement>(null);
     const drivingLicenseInputRef = React.useRef<HTMLInputElement>(null);
     const nicFrontObjectUrlRef = React.useRef<string | null>(null);
@@ -281,9 +285,15 @@ const BookingFlow: React.FC = () => {
             toast.error('Please select both pickup and return dates on the calendar.');
             return;
         }
-        if (currentStep === 3 && (!nicFrontDocument || !drivingLicenseDocument)) {
-            console.error('Both NIC Front and Driving License files are required before continuing.');
-            return;
+        if (currentStep === 3) {
+            if (!consentAccepted) {
+                toast.error('Please accept the consent checkbox before continuing.');
+                return;
+            }
+            if (!nicFrontDocument || !drivingLicenseDocument) {
+                console.error('Both NIC Front and Driving License files are required before continuing.');
+                return;
+            }
         }
         setCurrentStep(prev => Math.min(prev + 1, steps.length));
     };
@@ -310,8 +320,10 @@ const BookingFlow: React.FC = () => {
             setIsUploadingLicense(true);
         }
 
+        setUploadStatusMessage(`Uploading ${category === 'NIC_FRONT' ? 'NIC front' : 'driving license'}...`);
+
         try {
-            const uploadedDocument = await uploadMyDocument(file, category);
+            const uploadedDocument = await uploadMyDocument(file, category, consentAccepted);
             if (category === 'NIC_FRONT') {
                 setNicFrontDocument(uploadedDocument);
             } else {
@@ -320,8 +332,10 @@ const BookingFlow: React.FC = () => {
 
             await resolvePreview(uploadedDocument);
             void refetchDocuments();
+            setUploadStatusMessage(`${category === 'NIC_FRONT' ? 'NIC front' : 'Driving license'} uploaded successfully.`);
             toast.success('Document uploaded successfully');
         } catch (error) {
+            setUploadStatusMessage(null);
             toast.error(getErrorMessage(error, 'Document upload failed'));
         } finally {
             if (category === 'NIC_FRONT') {
@@ -332,11 +346,21 @@ const BookingFlow: React.FC = () => {
         }
     };
 
+    const ensureConsentBeforeUpload = () => {
+        if (consentAccepted) return true;
+        const message = 'Please accept consent before uploading documents.';
+        setConsentValidationMessage(message);
+        setUploadStatusMessage(null);
+        toast.error(message);
+        return false;
+    };
+
     const handleFileSelection = (
         file: File | null,
         category: MyDocumentCategory,
     ) => {
         if (!file) return;
+        if (!ensureConsentBeforeUpload()) return;
         if (!validateFile(file)) return;
 
         if (category === 'NIC_FRONT') {
@@ -369,8 +393,18 @@ const BookingFlow: React.FC = () => {
         category: MyDocumentCategory,
     ) => {
         event.preventDefault();
+        if (!ensureConsentBeforeUpload()) return;
         const file = event.dataTransfer.files?.[0] || null;
         handleFileSelection(file, category);
+    };
+
+    const handleSelectFileClick = (category: MyDocumentCategory) => {
+        if (!ensureConsentBeforeUpload()) return;
+        if (category === 'NIC_FRONT') {
+            nicFrontInputRef.current?.click();
+            return;
+        }
+        drivingLicenseInputRef.current?.click();
     };
 
     const handleViewDocument = async (document: UserDocumentMetadata) => {
@@ -392,10 +426,12 @@ const BookingFlow: React.FC = () => {
 
         setIsSubmitting(true);
         try {
+            const estimatedAdvanceAmount = Math.round((vehicle?.rentalPricePerDay ?? 0) * totalDays * 0.25);
             await api.post('/bookings', {
                 vehicleId,
                 startDate: dateRange?.from?.toISOString(),
                 endDate: dateRange?.to?.toISOString(),
+                estimatedAdvanceAmount,
             });
             toast.success('Booking requested successfully!');
             navigate('/profile');
@@ -554,17 +590,48 @@ const BookingFlow: React.FC = () => {
                                     <h2 className="text-3xl font-bold">Document Verification</h2>
                                     <p className="text-surface-400">We require a clear photo of your Driving License and NIC.</p>
 
+                                    <div className="glass-card !bg-surface-900/30 space-y-4 leading-normal">
+                                        <p className="text-sm text-surface-300">
+                                            <span className="font-bold text-primary-400">Privacy Notice:</span> {DOCUMENT_PRIVACY_MESSAGE}.
+                                        </p>
+                                        <label className="flex items-start gap-3 cursor-pointer text-sm text-surface-200">
+                                            <input
+                                                type="checkbox"
+                                                checked={consentAccepted}
+                                                onChange={(event) => {
+                                                    const isChecked = event.target.checked;
+                                                    setConsentAccepted(isChecked);
+                                                    if (isChecked) {
+                                                        setConsentValidationMessage(null);
+                                                    }
+                                                }}
+                                                className="mt-1 h-4 w-4 rounded border-white/20 bg-surface-900 text-primary-500 focus:ring-primary-500"
+                                            />
+                                            <span>I understand and consent to temporary document storage for verification.</span>
+                                        </label>
+                                        {consentValidationMessage && (
+                                            <p className="text-xs text-red-400">{consentValidationMessage}</p>
+                                        )}
+                                        {uploadStatusMessage && (
+                                            <p className="text-xs text-emerald-400">{uploadStatusMessage}</p>
+                                        )}
+                                    </div>
+
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <input
                                             ref={nicFrontInputRef}
                                             type="file"
                                             accept=".jpg,.jpeg,.png,.pdf"
                                             className="hidden"
+                                            disabled={!consentAccepted}
                                             onChange={(e) => handleFileInputChange(e, 'NIC_FRONT')}
                                         />
                                         <div
-                                            className="glass-card border-dashed border-2 border-white/10 flex flex-col items-center justify-center p-12 space-y-4 hover:border-primary-500/50 transition-colors group cursor-pointer leading-normal"
-                                            onClick={() => nicFrontInputRef.current?.click()}
+                                            className={cn(
+                                                "glass-card border-dashed border-2 border-white/10 flex flex-col items-center justify-center p-12 space-y-4 transition-colors group leading-normal",
+                                                consentAccepted ? "hover:border-primary-500/50 cursor-pointer" : "opacity-70 cursor-not-allowed"
+                                            )}
+                                            onClick={() => handleSelectFileClick('NIC_FRONT')}
                                             onDragOver={(e) => e.preventDefault()}
                                             onDrop={(e) => handleDrop(e, 'NIC_FRONT')}
                                         >
@@ -622,6 +689,17 @@ const BookingFlow: React.FC = () => {
                                             {isUploadingNic && (
                                                 <div className="text-[10px] text-surface-500 uppercase tracking-widest">Uploading...</div>
                                             )}
+                                            <button
+                                                type="button"
+                                                disabled={!consentAccepted || isUploadingNic}
+                                                className="btn-outline !py-2 !px-4 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectFileClick('NIC_FRONT');
+                                                }}
+                                            >
+                                                Upload NIC Front
+                                            </button>
                                             <div className="text-xs text-surface-500">JPG, PNG up to 5MB</div>
                                         </div>
                                         <input
@@ -629,11 +707,15 @@ const BookingFlow: React.FC = () => {
                                             type="file"
                                             accept=".jpg,.jpeg,.png,.pdf"
                                             className="hidden"
+                                            disabled={!consentAccepted}
                                             onChange={(e) => handleFileInputChange(e, 'DRIVING_LICENSE')}
                                         />
                                         <div
-                                            className="glass-card border-dashed border-2 border-white/10 flex flex-col items-center justify-center p-12 space-y-4 hover:border-primary-500/50 transition-colors group cursor-pointer leading-normal"
-                                            onClick={() => drivingLicenseInputRef.current?.click()}
+                                            className={cn(
+                                                "glass-card border-dashed border-2 border-white/10 flex flex-col items-center justify-center p-12 space-y-4 transition-colors group leading-normal",
+                                                consentAccepted ? "hover:border-primary-500/50 cursor-pointer" : "opacity-70 cursor-not-allowed"
+                                            )}
+                                            onClick={() => handleSelectFileClick('DRIVING_LICENSE')}
                                             onDragOver={(e) => e.preventDefault()}
                                             onDrop={(e) => handleDrop(e, 'DRIVING_LICENSE')}
                                         >
@@ -691,6 +773,17 @@ const BookingFlow: React.FC = () => {
                                             {isUploadingLicense && (
                                                 <div className="text-[10px] text-surface-500 uppercase tracking-widest">Uploading...</div>
                                             )}
+                                            <button
+                                                type="button"
+                                                disabled={!consentAccepted || isUploadingLicense}
+                                                className="btn-outline !py-2 !px-4 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSelectFileClick('DRIVING_LICENSE');
+                                                }}
+                                            >
+                                                Upload Driving License
+                                            </button>
                                             <div className="text-xs text-surface-500">JPG, PNG up to 5MB</div>
                                         </div>
                                     </div>
@@ -737,7 +830,14 @@ const BookingFlow: React.FC = () => {
                             </button>
 
                             {currentStep < steps.length ? (
-                                <button onClick={handleNext} className="btn-primary flex items-center space-x-2">
+                                <button
+                                    onClick={handleNext}
+                                    disabled={currentStep === 3 && !consentAccepted}
+                                    className={cn(
+                                        "btn-primary flex items-center space-x-2",
+                                        currentStep === 3 && !consentAccepted && "opacity-50 cursor-not-allowed"
+                                    )}
+                                >
                                     <span>Continue</span>
                                     <ChevronRight className="h-5 w-5" />
                                 </button>

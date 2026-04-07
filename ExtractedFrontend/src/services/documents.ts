@@ -2,6 +2,8 @@ import api from './api';
 
 export type MyDocumentCategory = 'NIC_FRONT' | 'DRIVING_LICENSE';
 const ALLOWED_DOCUMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+export const DOCUMENT_RETENTION_HOURS = 48;
+export const DOCUMENT_PRIVACY_MESSAGE = `Documents will be deleted after ${DOCUMENT_RETENTION_HOURS} hours`;
 
 export interface UserDocumentMetadata {
   id: string;
@@ -14,7 +16,8 @@ export interface UserDocumentMetadata {
 
 export const uploadMyDocument = async (
   file: File,
-  category: MyDocumentCategory
+  category: MyDocumentCategory,
+  consentAccepted: boolean
 ): Promise<UserDocumentMetadata> => {
   if (!(file instanceof File)) {
     throw new Error('Invalid file payload. Please choose a file again.');
@@ -22,6 +25,10 @@ export const uploadMyDocument = async (
 
   if (category !== 'NIC_FRONT' && category !== 'DRIVING_LICENSE') {
     throw new Error('Invalid document category.');
+  }
+
+  if (!consentAccepted) {
+    throw new Error('Consent is required before uploading documents.');
   }
 
   if (!ALLOWED_DOCUMENT_MIME_TYPES.includes(file.type)) {
@@ -32,6 +39,7 @@ export const uploadMyDocument = async (
   // IMPORTANT: must be exactly "file" and "category"
   formData.append('file', file, file.name);
   formData.append('category', category);
+  formData.append('consentAccepted', String(consentAccepted));
 
   if (import.meta.env.DEV) {
     const entries: Array<{ key: string; valueType: string }> = [];
