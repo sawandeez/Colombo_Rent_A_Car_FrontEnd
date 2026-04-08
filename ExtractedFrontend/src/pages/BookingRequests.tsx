@@ -8,6 +8,7 @@ import {
     DollarSign,
     Eye,
     ExternalLink,
+    FileSearch,
     FileText,
     Filter,
     Loader2,
@@ -48,7 +49,20 @@ type AdminUserDetails = {
 
 type AdminVehicleRate = Pick<Vehicle, 'id' | 'rentalPricePerDay'>;
 
-const STATUS_OPTIONS: BookingAdminStatus[] = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
+type AdminBookingFilter = BookingAdminStatus | 'RECEIPT_SUBMITTED';
+
+const STATUS_OPTIONS: AdminBookingFilter[] = ['PENDING', 'APPROVED', 'RECEIPT_SUBMITTED', 'PAYMENT_VERIFIED', 'REJECTED', 'CANCELLED'];
+
+const STATUS_LABELS: Record<AdminBookingFilter, string> = {
+    PENDING: 'Pending',
+    APPROVED: 'Approved',
+    CONFIRMED: 'Confirmed',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled',
+    COMPLETED: 'Completed',
+    PAYMENT_VERIFIED: 'Payment Verified',
+    RECEIPT_SUBMITTED: 'Awaiting Payment Verification',
+};
 const PAGE_SIZE = 10;
 
 const normalizeBookingList = (data: BookingAdminListResponse): BookingListResult => {
@@ -96,6 +110,28 @@ const getPickupDateTime = (booking: BookingAdminDTO) => booking.pickupDateTime |
 const getReturnDateTime = (booking: BookingAdminDTO) => booking.returnDateTime || booking.endDate;
 const getCreatedDateTime = (booking: BookingAdminDTO) => booking.createdAt || booking.bookingTime;
 const getTotalPriceValue = (booking: BookingAdminDTO) => booking.totalPrice ?? booking.totalAmount;
+const hasReceiptEvidence = (booking: BookingAdminDTO): boolean => {
+    const paymentStatus = String(booking.paymentStatus || '').toUpperCase();
+    return booking.receiptUploaded === true ||
+        Boolean(booking.receiptUploadedAt) ||
+        ['PENDING_VERIFICATION', 'SUCCESS', 'PAID', 'RECEIPT_SUBMITTED'].includes(paymentStatus);
+};
+
+const canBeAwaitingVerification = (booking: BookingAdminDTO): boolean => (
+    ['APPROVED', 'CONFIRMED'].includes(booking.status) && hasReceiptEvidence(booking)
+);
+
+const isPaymentVerifiedBooking = (booking: BookingAdminDTO): boolean => {
+    const paymentStatus = String(booking.paymentStatus || '').toUpperCase();
+    return booking.status === 'PAYMENT_VERIFIED' || ['VERIFIED', 'PAYMENT_VERIFIED'].includes(paymentStatus);
+};
+
+const canApproveBooking = (booking: BookingAdminDTO, activeFilter: AdminBookingFilter): boolean => {
+    if (booking.status === 'PENDING') return true;
+    if (activeFilter === 'RECEIPT_SUBMITTED') return canBeAwaitingVerification(booking);
+    return false;
+};
+
 const getBookingDurationDays = (booking: BookingAdminDTO) => {
     const pickupDateTime = getPickupDateTime(booking);
     const returnDateTime = getReturnDateTime(booking);
@@ -119,6 +155,7 @@ const StatusBadge: React.FC<{ status: BookingAdminStatus }> = ({ status }) => {
         REJECTED: 'bg-red-500/10 text-red-400 border-red-500/20',
         CANCELLED: 'bg-surface-800 text-surface-400 border-white/5',
         COMPLETED: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        PAYMENT_VERIFIED: 'bg-teal-500/10 text-teal-400 border-teal-500/20',
     }[status] || 'bg-surface-800 text-surface-400 border-white/5';
 
     return (
@@ -138,7 +175,7 @@ const getErrorMessage = (error: unknown) => {
 const BookingRequests: React.FC = () => {
     const queryClient = useQueryClient();
 
-    const [statusFilter, setStatusFilter] = React.useState<BookingAdminStatus>('PENDING');
+    const [statusFilter, setStatusFilter] = React.useState<AdminBookingFilter>('PENDING');
     const [searchQuery, setSearchQuery] = React.useState('');
     const [fromDate, setFromDate] = React.useState('');
     const [toDate, setToDate] = React.useState('');
@@ -157,9 +194,13 @@ const BookingRequests: React.FC = () => {
     const { data, isLoading, isFetching, error } = useQuery<BookingListResult>({
         queryKey: ['admin-bookings-approvals', statusFilter, page, searchQuery, fromDate, toDate],
         queryFn: async () => {
+            const isAwaitingFilter = statusFilter === 'RECEIPT_SUBMITTED';
+            const isPaymentVerifiedFilter = statusFilter === 'PAYMENT_VERIFIED';
             const response = await api.get<BookingAdminListResponse>('/admin/bookings', {
                 params: {
-                    status: statusFilter,
+                    status: isAwaitingFilter || isPaymentVerifiedFilter ? undefined : statusFilter,
+                    receiptUploaded: isAwaitingFilter ? true : undefined,
+                    paymentStatus: isPaymentVerifiedFilter ? 'VERIFIED' : undefined,
                     page: page - 1,
                     size: PAGE_SIZE,
                     search: searchQuery || undefined,
@@ -227,6 +268,21 @@ const BookingRequests: React.FC = () => {
         },
     });
 
+    const approvePaymentMutation = useMutation({
+        mutationFn: async (bookingId: string) => api.patch(`/admin/bookings/${bookingId}/approve-payment`),
+        onSuccess: () => {
+            toast.success('Payment verified successfully.');
+            setStatusFilter('PAYMENT_VERIFIED');
+            setPage(1);
+            queryClient.invalidateQueries({ queryKey: ['admin-bookings-approvals'] });
+            queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
+            setSelectedBooking(null);
+        },
+        onError: (mutationError: unknown) => {
+            toast.error(getErrorMessage(mutationError));
+        },
+    });
+
     const rejectMutation = useMutation({
         mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => (
             api.patch(`/admin/bookings/${bookingId}/reject`, reason ? { reason } : {})
@@ -234,6 +290,21 @@ const BookingRequests: React.FC = () => {
         onSuccess: () => {
             toast.success('Booking rejected successfully.');
             queryClient.invalidateQueries({ queryKey: ['admin-bookings-approvals'] });
+            setSelectedBooking(null);
+        },
+        onError: (mutationError: unknown) => {
+            toast.error(getErrorMessage(mutationError));
+        },
+    });
+
+    const rejectPaymentMutation = useMutation({
+        mutationFn: async ({ bookingId, reason }: { bookingId: string; reason?: string }) => (
+            api.patch(`/admin/bookings/${bookingId}/reject-payment`, reason ? { reason } : {})
+        ),
+        onSuccess: () => {
+            toast.success('Payment rejected.');
+            queryClient.invalidateQueries({ queryKey: ['admin-bookings-approvals'] });
+            queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
             setSelectedBooking(null);
         },
         onError: (mutationError: unknown) => {
@@ -308,10 +379,14 @@ const BookingRequests: React.FC = () => {
             }
 
             return true;
+        }).filter((booking) => {
+            // Client-side fallback: keep only approved/confirmed bookings with receipt evidence
+            if (statusFilter === 'RECEIPT_SUBMITTED') return canBeAwaitingVerification(booking) && !isPaymentVerifiedBooking(booking);
+            if (statusFilter === 'PAYMENT_VERIFIED') return isPaymentVerifiedBooking(booking);
+            return true;
         });
-    }, [bookings, fromDate, searchQuery, toDate]);
+    }, [bookings, fromDate, searchQuery, statusFilter, toDate]);
 
-    const totalPages = data?.totalPages || 1;
     const totalElements = data?.totalElements || filteredBookings.length;
 
     const rowCustomerIdsNeedingFallback = React.useMemo(() => {
@@ -400,7 +475,7 @@ const BookingRequests: React.FC = () => {
         return undefined;
     };
 
-    const handleStatusChange = (status: BookingAdminStatus) => {
+    const handleStatusChange = (status: AdminBookingFilter) => {
         setStatusFilter(status);
         setPage(1);
     };
@@ -409,6 +484,17 @@ const BookingRequests: React.FC = () => {
         const reason = window.prompt('Enter rejection reason (optional):') || '';
         rejectMutation.mutate({ bookingId, reason: reason.trim() || undefined });
     };
+
+    const handleRejectPayment = (bookingId: string) => {
+        const reason = window.prompt('Enter payment rejection reason (optional):') || '';
+        rejectPaymentMutation.mutate({ bookingId, reason: reason.trim() || undefined });
+    };
+
+    const isAnyMutationPending =
+        approveMutation.isPending ||
+        approvePaymentMutation.isPending ||
+        rejectMutation.isPending ||
+        rejectPaymentMutation.isPending;
 
     const handleOpenUserDocument = async (documentId: string) => {
         if (!selectedCustomerId) return;
@@ -421,6 +507,26 @@ const BookingRequests: React.FC = () => {
             window.open(objectUrl, '_blank', 'noopener,noreferrer');
             setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         } catch (error) {
+            toast.error(getErrorMessage(error));
+        }
+    };
+
+    const handleOpenPaymentReceipt = async (bookingId: string) => {
+        try {
+            const response = await api.get<Blob>(`/admin/bookings/${bookingId}/payment-receipt`, {
+                responseType: 'blob',
+            });
+
+            const objectUrl = URL.createObjectURL(response.data);
+            window.open(objectUrl, '_blank', 'noopener,noreferrer');
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (error) {
+            const axiosError = error as AxiosError<{ message?: string }>;
+            if (axiosError?.response?.status === 404) {
+                toast.error('No payment receipt has been uploaded for this booking yet.');
+                return;
+            }
+
             toast.error(getErrorMessage(error));
         }
     };
@@ -449,11 +555,13 @@ const BookingRequests: React.FC = () => {
                                 className={cn(
                                     'px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider border transition-colors',
                                     statusFilter === status
-                                        ? 'bg-primary-600/20 border-primary-500/40 text-primary-300'
+                                        ? status === 'RECEIPT_SUBMITTED'
+                                            ? 'bg-amber-600/20 border-amber-500/40 text-amber-300'
+                                            : 'bg-primary-600/20 border-primary-500/40 text-primary-300'
                                         : 'bg-white/5 border-white/10 text-surface-400 hover:text-white hover:bg-white/10'
                                 )}
                             >
-                                {status}
+                                {STATUS_LABELS[status]}
                             </button>
                         ))}
                     </div>
@@ -518,7 +626,11 @@ const BookingRequests: React.FC = () => {
                 ) : filteredBookings.length === 0 ? (
                     <div className="glass-card !p-10 text-center space-y-3 bg-surface-900/40">
                         <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500" />
-                        <h3 className="text-lg font-bold text-white">No pending booking requests</h3>
+                        <h3 className="text-lg font-bold text-white">
+                            {statusFilter === 'RECEIPT_SUBMITTED'
+                                ? 'No bookings awaiting payment verification'
+                                : 'No pending booking requests'}
+                        </h3>
                         <p className="text-sm text-surface-500">Try changing filters or search terms.</p>
                     </div>
                 ) : (
@@ -541,7 +653,7 @@ const BookingRequests: React.FC = () => {
                                 <tbody className="divide-y divide-white/5">
                                     {filteredBookings.map((booking) => {
                                         const bookingId = getBookingId(booking);
-                                        const isPending = booking.status === 'PENDING';
+                                        const isApprovable = canApproveBooking(booking, statusFilter);
                                         const totalPrice = getDisplayTotalPrice(booking);
 
                                         return (
@@ -558,7 +670,16 @@ const BookingRequests: React.FC = () => {
                                                 <td className="p-4 text-xs text-surface-300">{toDateTime(getPickupDateTime(booking))}</td>
                                                 <td className="p-4 text-xs text-surface-300">{toDateTime(getReturnDateTime(booking))}</td>
                                                 <td className="p-4 text-sm text-white">{typeof totalPrice === 'number' ? formatPrice(totalPrice) : '-'}</td>
-                                                <td className="p-4"><StatusBadge status={booking.status} /></td>
+                                                <td className="p-4">
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <StatusBadge status={booking.status} />
+                                                        {booking.receiptUploaded && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                                                Receipt Submitted
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
                                                 <td className="p-4 text-xs text-surface-400">{toDateTime(getCreatedDateTime(booking))}</td>
                                                 <td className="p-4">
                                                     <div className="flex items-center justify-end gap-2">
@@ -570,17 +691,17 @@ const BookingRequests: React.FC = () => {
                                                         </button>
                                                         <button
                                                             className="btn-primary !py-1.5 !px-3 text-xs !bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
-                                                            onClick={() => approveMutation.mutate(bookingId)}
-                                                            disabled={!isPending || approveMutation.isPending || rejectMutation.isPending}
+                                                                onClick={() => statusFilter === 'RECEIPT_SUBMITTED' ? approvePaymentMutation.mutate(bookingId) : approveMutation.mutate(bookingId)}
+                                                                disabled={!isApprovable || isAnyMutationPending}
                                                         >
-                                                            Approve
+                                                                {statusFilter === 'RECEIPT_SUBMITTED' ? 'Approve Payment' : 'Approve'}
                                                         </button>
                                                         <button
                                                             className="btn-outline !py-1.5 !px-3 text-xs border-red-500/20 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
-                                                            onClick={() => handleReject(bookingId)}
-                                                            disabled={!isPending || approveMutation.isPending || rejectMutation.isPending}
+                                                                onClick={() => statusFilter === 'RECEIPT_SUBMITTED' ? handleRejectPayment(bookingId) : handleReject(bookingId)}
+                                                                disabled={!isApprovable || isAnyMutationPending}
                                                         >
-                                                            Reject
+                                                                {statusFilter === 'RECEIPT_SUBMITTED' ? 'Reject Payment' : 'Reject'}
                                                         </button>
                                                     </div>
                                                 </td>
@@ -602,13 +723,6 @@ const BookingRequests: React.FC = () => {
                                     onClick={() => setPage((previous) => Math.max(1, previous - 1))}
                                 >
                                     Previous
-                                </button>
-                                <span className="text-xs font-bold uppercase tracking-wider text-surface-500">Page {page} / {totalPages}</span>
-                                <button
-                                    className="btn-outline !py-1.5 !px-3 text-xs"
-                                    disabled={page >= totalPages || isFetching}
-                                    onClick={() => setPage((previous) => previous + 1)}
-                                >
                                     Next
                                 </button>
                             </div>
@@ -652,6 +766,16 @@ const BookingRequests: React.FC = () => {
                                         <span className="text-surface-500">Status:</span>{' '}
                                         <StatusBadge status={selectedBooking.status} />
                                     </div>
+                                    {selectedBooking.receiptUploaded && (
+                                        <div className="flex items-center gap-2 pt-1">
+                                            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                                Receipt Submitted
+                                            </span>
+                                            {selectedBooking.receiptUploadedAt && (
+                                                <span className="text-[10px] text-surface-500">{toDateTime(selectedBooking.receiptUploadedAt)}</span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {selectedBooking.status === 'APPROVED' && (
@@ -716,6 +840,22 @@ const BookingRequests: React.FC = () => {
 
                                 <div className="glass-card !bg-white/5 !p-4 space-y-3">
                                     <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
+                                        <FileSearch className="h-4 w-4" /> Payment Receipt
+                                    </h4>
+                                    <p className="text-xs text-surface-500">
+                                        Open the payment receipt uploaded by the customer for this booking.
+                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleOpenPaymentReceipt(getBookingId(selectedBooking))}
+                                        className="btn-outline !py-2 !px-3 text-xs inline-flex items-center gap-2"
+                                    >
+                                        <ExternalLink className="h-3.5 w-3.5" /> Open Payment Receipt
+                                    </button>
+                                </div>
+
+                                <div className="glass-card !bg-white/5 !p-4 space-y-3">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
                                         <FileText className="h-4 w-4" /> Uploaded Documents
                                     </h4>
 
@@ -753,18 +893,21 @@ const BookingRequests: React.FC = () => {
 
                             <div className="p-8 grid grid-cols-2 gap-4 bg-white/5">
                                 <button
-                                    onClick={() => handleReject(getBookingId(selectedBooking))}
-                                    disabled={selectedBooking.status !== 'PENDING' || rejectMutation.isPending || approveMutation.isPending}
+                                        onClick={() => statusFilter === 'RECEIPT_SUBMITTED' ? handleRejectPayment(getBookingId(selectedBooking)) : handleReject(getBookingId(selectedBooking))}
+                                        disabled={!canApproveBooking(selectedBooking, statusFilter) || isAnyMutationPending}
                                     className="btn-outline !py-4 flex items-center justify-center gap-2 border-red-500/20 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                                 >
-                                    <XCircle className="h-5 w-5" /> Reject
+                                        <XCircle className="h-5 w-5" /> {statusFilter === 'RECEIPT_SUBMITTED' ? 'Reject Payment' : 'Reject'}
                                 </button>
                                 <button
-                                    onClick={() => approveMutation.mutate(getBookingId(selectedBooking))}
-                                    disabled={selectedBooking.status !== 'PENDING' || rejectMutation.isPending || approveMutation.isPending}
+                                        onClick={() => statusFilter === 'RECEIPT_SUBMITTED'
+                                            ? approvePaymentMutation.mutate(getBookingId(selectedBooking))
+                                            : approveMutation.mutate(getBookingId(selectedBooking))}
+                                        disabled={!canApproveBooking(selectedBooking, statusFilter) || isAnyMutationPending}
                                     className="btn-primary !py-4 flex items-center justify-center gap-2 !bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
                                 >
-                                    <CheckCircle2 className="h-5 w-5" /> Approve
+                                        {(approveMutation.isPending || approvePaymentMutation.isPending) && <Loader2 className="h-5 w-5 animate-spin" />}
+                                        <CheckCircle2 className="h-5 w-5" /> {statusFilter === 'RECEIPT_SUBMITTED' ? 'Approve Payment' : 'Approve'}
                                 </button>
                             </div>
                         </motion.div>

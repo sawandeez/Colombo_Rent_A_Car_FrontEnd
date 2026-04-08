@@ -6,14 +6,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Mail, Phone, MapPin, Calendar,
     Clock, AlertCircle,
-    Trash2, ExternalLink, Car
+    Trash2, ExternalLink, Car, Receipt
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Booking } from '../types';
 import { cn, formatDate, formatPrice } from '../utils';
 import { useAuthStore } from '../store/authStore';
 import { cancelBooking, getMyBookings } from '../services/bookings';
-import { initiatePayment, startPaymentCheckout } from '../services/paymentsApi';
+import {
+    initiatePayment,
+    startPaymentCheckout,
+} from '../services/paymentsApi';
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     const styles = {
@@ -22,6 +25,8 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
         REJECTED: "bg-red-500/10 text-red-400 border-red-500/20",
         CANCELLED: "bg-surface-800 text-surface-400 border-white/5",
         COMPLETED: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+        CONFIRMED: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+        PAYMENT_VERIFIED: "bg-blue-500/10 text-blue-400 border-blue-500/20",
     }[status] || "bg-surface-800 text-surface-400";
 
     return (
@@ -69,6 +74,14 @@ const Profile: React.FC = () => {
         return ['APPROVED', 'CONFIRMED'].includes(booking.status);
     };
 
+    const canUploadReceipt = (booking: Booking): boolean =>
+        ['APPROVED', 'CONFIRMED'].includes(booking.status) && !booking.receiptUploaded;
+
+    const isFinalizedBookingStatus = (status: string): boolean => {
+        const normalizedStatus = status.toUpperCase();
+        return ['REJECTED', 'CANCELLED', 'COMPLETED', 'PAYMENT_VERIFIED'].includes(normalizedStatus);
+    };
+
     const handlePayAdvance = async (booking: Booking) => {
         setInitiatingBookingId(booking.id);
 
@@ -87,8 +100,13 @@ const Profile: React.FC = () => {
         }
     };
 
-    const ongoingBookings = bookings.filter(b => ['PENDING', 'APPROVED', 'CONFIRMED'].includes(b.status));
-    const historyBookings = bookings.filter(b => !['PENDING', 'APPROVED', 'CONFIRMED'].includes(b.status));
+    const ongoingBookings = bookings.filter(
+        (booking) => !isFinalizedBookingStatus(booking.status) && !booking.receiptUploaded,
+    );
+    const paidBookings = bookings.filter(
+        (booking) => !isFinalizedBookingStatus(booking.status) && booking.receiptUploaded,
+    );
+    const historyBookings = bookings.filter((booking) => isFinalizedBookingStatus(booking.status));
 
     return (
         <div className="min-h-screen pb-20 pt-10">
@@ -207,6 +225,14 @@ const Profile: React.FC = () => {
                                                             {initiatingBookingId === booking.id ? 'Starting...' : 'Pay Advance'}
                                                         </button>
                                                     )}
+                                                    {canUploadReceipt(booking) && (
+                                                        <Link
+                                                            to={`/payment/receipt?bookingId=${booking.id}`}
+                                                            className="btn-outline !py-2 !px-3 text-[10px] font-bold"
+                                                        >
+                                                            Upload Receipt
+                                                        </Link>
+                                                    )}
                                                     {booking.status === 'PENDING' && (
                                                         <button
                                                             onClick={() => cancelMutation.mutate(booking.id)}
@@ -221,6 +247,7 @@ const Profile: React.FC = () => {
                                                     </Link>
                                                 </div>
                                             </div>
+
                                         </div>
                                     </motion.div>
                                 ))
@@ -234,6 +261,73 @@ const Profile: React.FC = () => {
                                 </div>
                             )}
                         </AnimatePresence>
+
+                    {/* Paid Bookings (receipt submitted, awaiting verification) */}
+                    {(isLoading || paidBookings.length > 0) && (
+                        <div className="space-y-8">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-2xl font-bold flex items-center gap-3">
+                                    <Receipt className="h-6 w-6 text-emerald-500" />
+                                    Paid — Awaiting Verification
+                                </h2>
+                                <span className="text-xs font-bold text-surface-500 bg-surface-900 px-3 py-1 rounded-full uppercase tracking-tighter">
+                                    {paidBookings.length} Receipt{paidBookings.length !== 1 ? 's' : ''} Submitted
+                                </span>
+                            </div>
+
+                            <AnimatePresence mode="popLayout">
+                                {paidBookings.map((booking) => (
+                                    <motion.div
+                                        key={booking.id}
+                                        layout
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        className="glass-card flex flex-col md:flex-row gap-6 hover:border-emerald-500/30 transition-all leading-normal border-emerald-500/10"
+                                    >
+                                        <div className="w-full md:w-48 aspect-[16/10] bg-surface-800 rounded-xl overflow-hidden shrink-0">
+                                            <img src={booking.vehicle?.imageUrls?.[0]} className="w-full h-full object-cover" />
+                                        </div>
+
+                                        <div className="flex-grow space-y-4 flex flex-col justify-between">
+                                            <div className="flex justify-between items-start">
+                                                <div className="text-left">
+                                                    <h4 className="font-bold text-lg">{booking.vehicle?.make} {booking.vehicle?.model}</h4>
+                                                    <div className="flex items-center gap-2 text-xs text-surface-500 mt-1">
+                                                        <Calendar className="h-3 w-3" />
+                                                        <span>{formatDate(booking.startDate)} — {formatDate(booking.endDate)}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <StatusBadge status={booking.status} />
+                                                    <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+                                                        Receipt Submitted
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-left">
+                                                    <div className="text-[10px] text-surface-500 font-bold uppercase tracking-widest">Booking ID</div>
+                                                    <div className="text-xs font-medium font-mono text-surface-300">#{booking.id?.slice(-8)?.toUpperCase() || 'N/A'}</div>
+                                                </div>
+                                                {booking.receiptUploadedAt && (
+                                                    <div className="text-right">
+                                                        <div className="text-[10px] text-surface-500 font-bold uppercase tracking-widest">Submitted At</div>
+                                                        <div className="text-xs text-emerald-400">{formatDate(booking.receiptUploadedAt)}</div>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-3">
+                                                    <Link to={`/vehicles/${booking.vehicleId}`} className="p-2 text-surface-500 hover:text-primary-500 hover:bg-primary-500/10 rounded-lg transition-all">
+                                                        <ExternalLink className="h-5 w-5" />
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </AnimatePresence>
+                        </div>
+                    )}
                     </div>
 
                     {/* Sidebar / Stats & History */}
