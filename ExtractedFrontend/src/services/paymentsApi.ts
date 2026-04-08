@@ -1,5 +1,10 @@
 import api from './api';
 
+export const RECEIPT_ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'application/pdf'] as const;
+export const RECEIPT_ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.pdf'] as const;
+export const RECEIPT_ACCEPT_ATTRIBUTE = '.jpg,.jpeg,.png,.pdf,application/pdf,image/jpeg,image/png';
+export const RECEIPT_INVALID_FILE_MESSAGE = 'Invalid file type. Please upload JPEG, JPG, PNG, or PDF.';
+
 export type InitiatePaymentResponsePayHere = {
     gateway: 'PAYHERE';
     orderId: string;
@@ -20,6 +25,37 @@ export type InitiatePaymentOptions = {
     cancelUrl?: string;
 };
 
+export type UploadPaymentReceiptPayload = {
+    bankName: string;
+    bankBranch: string;
+    amount: number;
+    file: File;
+};
+
+export type PaymentReceiptUploadResponse = {
+    id: string;
+    bookingId: string;
+    userId?: string;
+    bankName: string;
+    bankBranch: string;
+    amount: number;
+    fileName: string;
+    contentType: string;
+    uploadedAt: string;
+};
+
+const hasAllowedReceiptExtension = (fileName: string): boolean => {
+    const normalizedName = fileName.toLowerCase();
+    return RECEIPT_ALLOWED_EXTENSIONS.some((extension) => normalizedName.endsWith(extension));
+};
+
+export const isValidReceiptFile = (file: File): boolean => {
+    if (!(file instanceof File)) return false;
+
+    return RECEIPT_ALLOWED_MIME_TYPES.includes(file.type as (typeof RECEIPT_ALLOWED_MIME_TYPES)[number])
+        || hasAllowedReceiptExtension(file.name);
+};
+
 export const initiatePayment = async (
     bookingId: string,
     options?: InitiatePaymentOptions,
@@ -32,6 +68,32 @@ export const initiatePayment = async (
         : undefined;
 
     const response = await api.post<InitiatePaymentResponse>(`/bookings/${bookingId}/payments/initiate`, payload);
+    return response.data;
+};
+
+export const uploadPaymentReceipt = async (
+    bookingId: string,
+    payload: UploadPaymentReceiptPayload,
+): Promise<PaymentReceiptUploadResponse> => {
+    if (!(payload.file instanceof File) || !isValidReceiptFile(payload.file)) {
+        throw new Error(RECEIPT_INVALID_FILE_MESSAGE);
+    }
+
+    const formData = new FormData();
+    formData.append('file', payload.file, payload.file.name);
+    formData.append('bankName', payload.bankName.trim());
+    formData.append('bankBranch', payload.bankBranch.trim());
+    formData.append('amount', String(payload.amount));
+
+    const response = await api.post<PaymentReceiptUploadResponse>(
+        `/bookings/${bookingId}/payment-receipt`,
+        formData,
+        {
+            headers: {},
+            transformRequest: [(data) => data],
+        },
+    );
+
     return response.data;
 };
 
