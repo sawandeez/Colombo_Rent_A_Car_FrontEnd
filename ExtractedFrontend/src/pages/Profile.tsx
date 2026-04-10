@@ -202,7 +202,7 @@ const Profile: React.FC = () => {
                                                                 void handlePayAdvance(booking);
                                                             }}
                                                             disabled={initiatingBookingId === booking.id}
-                                                            className="btn-primary !py-2 !px-3 text-[10px] font-bold disabled:opacity-60"
+                                                            className="btn-primary !py-2 !px-3 text-[10px] font-bold disabled:opacity-60 !bg-red-600 !border-red-600 hover:!bg-red-700 !text-white"
                                                         >
                                                             {initiatingBookingId === booking.id ? 'Starting...' : 'Pay Advance'}
                                                         </button>
