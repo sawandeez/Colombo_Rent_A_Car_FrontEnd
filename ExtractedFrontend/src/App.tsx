@@ -14,6 +14,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import BookingRequests from './pages/BookingRequests';
 import VehicleManagement from './pages/VehicleManagement';
 import AuditLogs from './pages/AuditLogs';
+import PaymentSuccess from './pages/PaymentSuccess';
+import PaymentFail from './pages/PaymentFail';
+import UploadReceipt from './pages/UploadReceipt';
 import { useAuthStore } from './store/authStore';
 
 const queryClient = new QueryClient({
@@ -43,6 +46,13 @@ function App() {
             <Route path="vehicles/:id" element={<VehicleDetails />} />
             <Route path="login" element={<Login />} />
             <Route path="register" element={<Register />} />
+            <Route path="payment/success" element={<PaymentSuccess />} />
+            <Route path="payment/fail" element={<PaymentFail />} />
+            <Route path="payment/receipt" element={
+              <ProtectedRoute allowedRoles={['CUSTOMER', 'ADMIN', 'SPECIAL_ADMIN']}>
+                <UploadReceipt />
+              </ProtectedRoute>
+            } />
 
             {/* Customer Protected Routes */}
             <Route path="booking" element={

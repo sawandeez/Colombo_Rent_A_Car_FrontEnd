@@ -16,7 +16,8 @@ export interface AuthResponse {
   role: string;
 }
 
-export type BookingStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus = 'PENDING' | 'APPROVED' | 'CONFIRMED' | 'REJECTED' | 'CANCELLED' | 'COMPLETED' | 'PAYMENT_VERIFIED';
+export type PaymentStatus = 'PENDING' | 'INITIATED' | 'SUCCESS' | 'FAILED' | 'CANCELLED' | 'PENDING_VERIFICATION' | 'VERIFIED';
 
 export type BookingAdminStatus = BookingStatus;
 
@@ -44,7 +45,11 @@ export interface Booking {
   status: BookingStatus;
   advanceAmount?: number;
   advancePaid?: boolean;
+  paymentStatus?: PaymentStatus | string;
+  paymentDate?: string;
   rejectionReason?: string;
+  receiptUploaded?: boolean;
+  receiptUploadedAt?: string;
   vehicle?: Vehicle; // Nested DTO from backend
 }
 
@@ -80,7 +85,13 @@ export interface BookingAdminDTO {
   vehicleId?: string;
   vehicleName?: string;
   vehicle?: BookingAdminVehicle;
+  advanceAmount?: number;
+  advanceCurrency?: string;
+  paymentStatus?: PaymentStatus | string;
+  paymentDate?: string;
   rejectionReason?: string;
+  receiptUploaded?: boolean;
+  receiptUploadedAt?: string;
 }
 
 export interface PaginatedResponse<T> {

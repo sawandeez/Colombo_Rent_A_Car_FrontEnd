@@ -71,3 +71,63 @@ export default defineConfig([
   },
 ])
 ```
+
+## FTW-101 Payment Flow (PayHere + Mock)
+
+This frontend supports customer advance payment initiation using a backend-generated gateway payload. It works for both real PayHere redirect form-post and mock checkout redirect.
+
+### Implemented Pages/Flows
+
+- `Pay Advance` action in customer active reservations (`/profile`)
+- Redirect-based gateway post using backend payload fields
+- Success return page: `/payment/success`
+- Failure/cancel return page: `/payment/fail`
+
+### Backend Contract Expected
+
+`POST /api/v1/bookings/{bookingId}/payments/initiate`
+
+Expected shape:
+
+```ts
+type InitiatePaymentResponsePayHere = {
+  gateway: 'PAYHERE';
+  orderId: string;
+  payhereUrl: string;
+  fields: Record<string, string>;
+};
+
+type InitiatePaymentResponseMock = {
+  gateway: 'MOCK';
+  orderId: string;
+  redirectUrl: string;
+};
+
+type InitiatePaymentResponse = InitiatePaymentResponsePayHere | InitiatePaymentResponseMock;
+```
+
+### Manual Sandbox Test Steps
+
+1. Start frontend:
+
+```bash
+npm install
+npm run dev
+```
+
+2. Ensure `VITE_API_BASE_URL` points to backend where payment initiate endpoint is available.
+3. Login as a customer and open `/profile`.
+4. Pick an active booking and click `Pay Advance`.
+5. If backend returns `gateway = PAYHERE`, verify browser is redirected to PayHere checkout using an auto-submitted hidden POST form.
+6. If backend returns `gateway = MOCK`, verify browser redirects to the mock checkout URL (`redirectUrl`) using normal redirect.
+7. Complete payment (sandbox or mock):
+  - Success path should return to `/payment/success?bookingId=<id>`.
+  - Page shows `Payment successful (pending confirmation)...` and polls booking status every 2s for up to 30s.
+8. Cancel/fail payment:
+  - Return should land on `/payment/fail?bookingId=<id>`.
+  - Page shows retry action and latest booking/payment status.
+
+### Notes
+
+- Backend verification/webhook handling is intentionally not implemented in frontend.
+- Frontend is gateway-agnostic. It never builds merchant fields or hashes; it only redirects/posts values returned by backend.
