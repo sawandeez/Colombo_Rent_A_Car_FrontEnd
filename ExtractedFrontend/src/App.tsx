@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import MainLayout from './components/layout/MainLayout';
+import AdminLayout from './components/layout/AdminLayout';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -74,24 +75,22 @@ function App() {
             {/* Admin Protected Routes */}
             <Route path="admin" element={
               <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
-                <AdminDashboard />
+                <AdminLayout />
               </ProtectedRoute>
-            } />
-            <Route path="admin/bookings" element={
-              <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
-                <BookingRequests />
-              </ProtectedRoute>
-            } />
-            <Route path="admin/vehicles" element={
-              <ProtectedRoute allowedRoles={['ADMIN', 'SPECIAL_ADMIN']}>
-                <VehicleManagement />
-              </ProtectedRoute>
-            } />
-            <Route path="admin/logs" element={
-              <ProtectedRoute allowedRoles={['SPECIAL_ADMIN']}>
-                <AuditLogs />
-              </ProtectedRoute>
-            } />
+            }>
+              <Route index element={<AdminDashboard />} />
+              <Route path="bookings" element={<BookingRequests />} />
+              <Route path="vehicles" element={
+                <ProtectedRoute allowedRoles={['ADMIN']}>
+                  <VehicleManagement />
+                </ProtectedRoute>
+              } />
+              <Route path="logs" element={
+                <ProtectedRoute allowedRoles={['SPECIAL_ADMIN']}>
+                  <AuditLogs />
+                </ProtectedRoute>
+              } />
+            </Route>
           </Route>
         </Routes>
       </Router>

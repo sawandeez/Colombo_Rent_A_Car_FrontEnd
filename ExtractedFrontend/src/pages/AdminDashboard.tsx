@@ -45,8 +45,22 @@ const AdminDashboard: React.FC = () => {
     const { data: recentRequests = [], isLoading } = useQuery({
         queryKey: ['admin-recent-requests'],
         queryFn: async () => {
-            const response = await api.get('/bookings?status=PENDING');
-            return response.data.slice(0, 5); // Just first 5
+            const response = await api.get('/admin/bookings', {
+                params: {
+                    status: 'PENDING',
+                    page: 0,
+                    size: 5,
+                },
+            });
+
+            const payload = response.data;
+            const rows = Array.isArray(payload)
+                ? payload
+                : Array.isArray(payload?.content)
+                    ? payload.content
+                    : [];
+
+            return rows.slice(0, 5); // Just first 5
         }
     });
 
@@ -84,7 +98,6 @@ const AdminDashboard: React.FC = () => {
                                 <Clock className="h-5 w-5 text-primary-500" />
                                 Recent Booking Requests
                             </h2>
-                            <Link to="/admin/bookings" className="text-xs font-bold text-primary-500 hover:underline">View All Requests</Link>
                         </div>
 
                         <div className="glass-card !p-0 overflow-hidden divide-y divide-white/5 bg-surface-900/40">
@@ -158,9 +171,6 @@ const AdminDashboard: React.FC = () => {
                             </div>
 
                             <div className="pt-4">
-                                <Link to="/admin/vehicles" className="btn-primary w-full flex items-center justify-center gap-2 !py-3 !text-xs">
-                                    <Car className="h-4 w-4" /> Manage Fleet
-                                </Link>
                             </div>
                         </div>
 
