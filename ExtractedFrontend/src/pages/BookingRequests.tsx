@@ -5,39 +5,28 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
     Calendar,
     CheckCircle2,
-    DollarSign,
     Eye,
     ExternalLink,
-    FileSearch,
-    FileText,
-    Filter,
     Loader2,
     Search,
     XCircle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import api from '../services/api';
-import { setAdvanceAmount } from '../services/bookings';
 import type {
+    AdminBookingDetailsResponse,
     BookingAdminDTO,
     BookingAdminListResponse,
     BookingAdminStatus,
     Vehicle,
 } from '../types';
+import { getAdminBookingDetails } from '../services/bookings';
 import { cn, formatPrice } from '../utils';
 
 type BookingListResult = {
     items: BookingAdminDTO[];
     totalPages: number;
     totalElements: number;
-};
-
-type AdminUserDocument = {
-    id: string;
-    category: string;
-    originalFilename?: string;
-    contentType?: string;
-    createdAt?: string;
 };
 
 type AdminUserDetails = {
@@ -121,11 +110,6 @@ const canBeAwaitingVerification = (booking: BookingAdminDTO): boolean => (
     ['APPROVED', 'CONFIRMED'].includes(booking.status) && hasReceiptEvidence(booking)
 );
 
-const isPaymentVerifiedBooking = (booking: BookingAdminDTO): boolean => {
-    const paymentStatus = String(booking.paymentStatus || '').toUpperCase();
-    return booking.status === 'PAYMENT_VERIFIED' || ['VERIFIED', 'PAYMENT_VERIFIED'].includes(paymentStatus);
-};
-
 const canApproveBooking = (booking: BookingAdminDTO, activeFilter: AdminBookingFilter): boolean => {
     if (booking.status === 'PENDING') return true;
     if (activeFilter === 'RECEIPT_SUBMITTED') return canBeAwaitingVerification(booking);
@@ -177,22 +161,11 @@ const BookingRequests: React.FC = () => {
 
     const [statusFilter, setStatusFilter] = React.useState<AdminBookingFilter>('PENDING');
     const [searchQuery, setSearchQuery] = React.useState('');
-    const [fromDate, setFromDate] = React.useState('');
-    const [toDate, setToDate] = React.useState('');
+    const [selectedDate, setSelectedDate] = React.useState('');
     const [page, setPage] = React.useState(1);
     const [selectedBooking, setSelectedBooking] = React.useState<BookingAdminDTO | null>(null);
-    const [advanceAmountInput, setAdvanceAmountInput] = React.useState('');
-    const [advanceCurrencyInput, setAdvanceCurrencyInput] = React.useState('LKR');
-    const selectedCustomerId = selectedBooking ? getCustomerId(selectedBooking) : '';
-    const needsCustomerDetailsFallback = Boolean(
-        selectedBooking &&
-        selectedCustomerId &&
-        !selectedBooking.user?.name &&
-        !selectedBooking.customerName
-    );
-
     const { data, isLoading, isFetching, error } = useQuery<BookingListResult>({
-        queryKey: ['admin-bookings-approvals', statusFilter, page, searchQuery, fromDate, toDate],
+        queryKey: ['admin-bookings-approvals', statusFilter, page, searchQuery, selectedDate],
         queryFn: async () => {
             const isAwaitingFilter = statusFilter === 'RECEIPT_SUBMITTED';
             const isPaymentVerifiedFilter = statusFilter === 'PAYMENT_VERIFIED';
@@ -204,57 +177,14 @@ const BookingRequests: React.FC = () => {
                     page: page - 1,
                     size: PAGE_SIZE,
                     search: searchQuery || undefined,
-                    fromDate: fromDate || undefined,
-                    toDate: toDate || undefined,
+                    fromDate: selectedDate || undefined,
+                    toDate: selectedDate || undefined,
                 },
             });
             return normalizeBookingList(response.data);
         },
         placeholderData: (previousData) => previousData,
     });
-
-    React.useEffect(() => {
-        if (selectedBooking) {
-            setAdvanceAmountInput(
-                selectedBooking.advanceAmount !== undefined ? String(selectedBooking.advanceAmount) : '',
-            );
-            setAdvanceCurrencyInput(selectedBooking.advanceCurrency || 'LKR');
-        }
-    }, [selectedBooking?.id]);
-
-    const advanceMutation = useMutation({
-        mutationFn: async ({ bookingId, amount, currency }: { bookingId: string; amount: number; currency: string }) =>
-            setAdvanceAmount(bookingId, amount, currency),
-        onSuccess: () => {
-            toast.success('Advance amount saved successfully.');
-            queryClient.invalidateQueries({ queryKey: ['admin-bookings-approvals'] });
-            if (selectedBooking) {
-                const parsed = parseFloat(advanceAmountInput);
-                setSelectedBooking({
-                    ...selectedBooking,
-                    advanceAmount: parsed,
-                    advanceCurrency: advanceCurrencyInput,
-                });
-            }
-        },
-        onError: (mutationError: unknown) => {
-            toast.error(getErrorMessage(mutationError));
-        },
-    });
-
-    const handleSetAdvanceAmount = () => {
-        if (!selectedBooking || !advanceAmountInput) return;
-        const amount = parseFloat(advanceAmountInput);
-        if (Number.isNaN(amount) || amount < 0) {
-            toast.error('Please enter a valid advance amount.');
-            return;
-        }
-        advanceMutation.mutate({
-            bookingId: getBookingId(selectedBooking),
-            amount,
-            currency: advanceCurrencyInput || 'LKR',
-        });
-    };
 
     const approveMutation = useMutation({
         mutationFn: async (bookingId: string) => api.patch(`/admin/bookings/${bookingId}/approve`),
@@ -312,82 +242,22 @@ const BookingRequests: React.FC = () => {
         },
     });
 
-    const {
-        data: selectedUserDocuments = [],
-        isLoading: isUserDocumentsLoading,
-        error: userDocumentsError,
-    } = useQuery<AdminUserDocument[]>({
-        queryKey: ['admin-user-documents', selectedCustomerId],
-        queryFn: async () => {
-            const response = await api.get<AdminUserDocument[]>(`/admin/users/${selectedCustomerId}/documents`);
-            return response.data;
-        },
-        enabled: Boolean(selectedCustomerId),
-    });
-
-    const { data: selectedUserDetails } = useQuery<AdminUserDetails>({
-        queryKey: ['admin-user-details', selectedCustomerId],
-        queryFn: async () => {
-            const response = await api.get<AdminUserDetails>(`/admin/users/${selectedCustomerId}`);
-            return response.data;
-        },
-        enabled: needsCustomerDetailsFallback,
+    const { data: details } = useQuery<AdminBookingDetailsResponse>({
+        queryKey: ['admin-booking-details', selectedBooking?.id],
+        queryFn: () => getAdminBookingDetails(getBookingId(selectedBooking!)),
+        enabled: Boolean(selectedBooking),
     });
 
     const selectedCustomerName = selectedBooking
-        ? (selectedUserDetails?.name || selectedUserDetails?.username || getCustomerName(selectedBooking))
+        ? (details?.customer?.name || getCustomerName(selectedBooking))
         : 'Unknown Customer';
 
     const selectedCustomerEmail = selectedBooking
-        ? (selectedUserDetails?.email || getCustomerEmail(selectedBooking))
+        ? (details?.customer?.email || getCustomerEmail(selectedBooking))
         : '-';
 
-    const bookings = data?.items || [];
-    const filteredBookings = React.useMemo(() => {
-        const query = searchQuery.trim().toLowerCase();
-        return bookings.filter((booking) => {
-            const bookingId = getBookingId(booking).toLowerCase();
-            const customerName = getCustomerName(booking).toLowerCase();
-            const customerEmail = getCustomerEmail(booking).toLowerCase();
-            const vehicleName = getVehicleName(booking).toLowerCase();
-            const vehicleId = getVehicleId(booking).toLowerCase();
-
-            const matchesSearch = !query ||
-                bookingId.includes(query) ||
-                customerName.includes(query) ||
-                customerEmail.includes(query) ||
-                vehicleName.includes(query) ||
-                vehicleId.includes(query);
-
-            if (!matchesSearch) return false;
-
-            const createdAt = getCreatedDateTime(booking);
-            if (!createdAt) return !fromDate && !toDate;
-            const createdDate = new Date(createdAt);
-            if (Number.isNaN(createdDate.getTime())) return true;
-
-            if (fromDate) {
-                const from = new Date(fromDate);
-                from.setHours(0, 0, 0, 0);
-                if (createdDate < from) return false;
-            }
-
-            if (toDate) {
-                const to = new Date(toDate);
-                to.setHours(23, 59, 59, 999);
-                if (createdDate > to) return false;
-            }
-
-            return true;
-        }).filter((booking) => {
-            // Client-side fallback: keep only approved/confirmed bookings with receipt evidence
-            if (statusFilter === 'RECEIPT_SUBMITTED') return canBeAwaitingVerification(booking) && !isPaymentVerifiedBooking(booking);
-            if (statusFilter === 'PAYMENT_VERIFIED') return isPaymentVerifiedBooking(booking);
-            return true;
-        });
-    }, [bookings, fromDate, searchQuery, statusFilter, toDate]);
-
-    const totalElements = data?.totalElements || filteredBookings.length;
+    const filteredBookings = data?.items || [];
+    const totalElements = data?.totalElements ?? filteredBookings.length;
 
     const rowCustomerIdsNeedingFallback = React.useMemo(() => {
         const ids = filteredBookings
@@ -496,37 +366,15 @@ const BookingRequests: React.FC = () => {
         rejectMutation.isPending ||
         rejectPaymentMutation.isPending;
 
-    const handleOpenUserDocument = async (documentId: string) => {
-        if (!selectedCustomerId) return;
-
-        try {
-            const response = await api.get<Blob>(`/admin/users/${selectedCustomerId}/documents/${documentId}`, {
-                responseType: 'blob',
-            });
-            const objectUrl = URL.createObjectURL(response.data);
-            window.open(objectUrl, '_blank', 'noopener,noreferrer');
-            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-        } catch (error) {
-            toast.error(getErrorMessage(error));
-        }
-    };
-
     const handleOpenPaymentReceipt = async (bookingId: string) => {
         try {
             const response = await api.get<Blob>(`/admin/bookings/${bookingId}/payment-receipt`, {
                 responseType: 'blob',
             });
-
             const objectUrl = URL.createObjectURL(response.data);
             window.open(objectUrl, '_blank', 'noopener,noreferrer');
             setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
         } catch (error) {
-            const axiosError = error as AxiosError<{ message?: string }>;
-            if (axiosError?.response?.status === 404) {
-                toast.error('No payment receipt has been uploaded for this booking yet.');
-                return;
-            }
-
             toast.error(getErrorMessage(error));
         }
     };
@@ -585,27 +433,13 @@ const BookingRequests: React.FC = () => {
                             <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-500" />
                             <input
                                 type="date"
-                                value={fromDate}
+                                value={selectedDate}
                                 onChange={(e) => {
-                                    setFromDate(e.target.value);
+                                    setSelectedDate(e.target.value);
                                     setPage(1);
                                 }}
                                 className="input-field pl-12"
-                                aria-label="From date"
-                            />
-                        </div>
-
-                        <div className="relative">
-                            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-500" />
-                            <input
-                                type="date"
-                                value={toDate}
-                                onChange={(e) => {
-                                    setToDate(e.target.value);
-                                    setPage(1);
-                                }}
-                                className="input-field pl-12"
-                                aria-label="To date"
+                                aria-label="Filter by date"
                             />
                         </div>
                     </div>
@@ -761,90 +595,14 @@ const BookingRequests: React.FC = () => {
                                             ? formatPrice(getDisplayTotalPrice(selectedBooking) as number)
                                             : '-'}
                                     </div>
-                                    <div><span className="text-surface-500">Created:</span> {toDateTime(getCreatedDateTime(selectedBooking))}</div>
                                     <div>
                                         <span className="text-surface-500">Status:</span>{' '}
                                         <StatusBadge status={selectedBooking.status} />
                                     </div>
-                                    {selectedBooking.receiptUploaded && (
-                                        <div className="flex items-center gap-2 pt-1">
-                                            <span className="px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border border-amber-500/30 bg-amber-500/10 text-amber-300">
-                                                Receipt Submitted
-                                            </span>
-                                            {selectedBooking.receiptUploadedAt && (
-                                                <span className="text-[10px] text-surface-500">{toDateTime(selectedBooking.receiptUploadedAt)}</span>
-                                            )}
-                                        </div>
-                                    )}
                                 </div>
 
-                                {selectedBooking.status === 'APPROVED' && (
-                                    <div className="glass-card !bg-white/5 !p-4 space-y-3">
-                                        <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
-                                            <DollarSign className="h-4 w-4" /> Advance Payment
-                                        </h4>
-                                        {typeof selectedBooking.advanceAmount === 'number' && (
-                                            <div className="text-xs text-emerald-400 font-medium">
-                                                Current: {selectedBooking.advanceAmount.toLocaleString()} {selectedBooking.advanceCurrency || 'LKR'}
-                                            </div>
-                                        )}
-                                        {(() => {
-                                            const total = getDisplayTotalPrice(selectedBooking);
-                                            const estimate = typeof total === 'number' ? Math.round(total * 0.25) : null;
-                                            return estimate !== null ? (
-                                                <div className="flex items-center justify-between bg-surface-800/60 rounded-lg px-3 py-2">
-                                                    <span className="text-[10px] text-surface-400 uppercase tracking-wider">
-                                                        System estimate (25%):&nbsp;
-                                                        <span className="text-surface-200 font-bold">{formatPrice(estimate)}</span>
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setAdvanceAmountInput(String(estimate))}
-                                                        className="text-primary-400 hover:text-primary-300 text-[10px] font-bold hover:underline ml-3"
-                                                    >
-                                                        Use
-                                                    </button>
-                                                </div>
-                                            ) : null;
-                                        })()}
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                step="1"
-                                                value={advanceAmountInput}
-                                                onChange={(e) => setAdvanceAmountInput(e.target.value)}
-                                                placeholder="Enter amount"
-                                                className="input-field flex-1"
-                                            />
-                                            <input
-                                                type="text"
-                                                value={advanceCurrencyInput}
-                                                onChange={(e) => setAdvanceCurrencyInput(e.target.value.toUpperCase())}
-                                                placeholder="LKR"
-                                                className="input-field !w-24"
-                                                maxLength={3}
-                                            />
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleSetAdvanceAmount}
-                                            disabled={!advanceAmountInput || advanceMutation.isPending}
-                                            className="btn-primary !py-2 w-full text-xs flex items-center justify-center gap-2 disabled:opacity-50"
-                                        >
-                                            {advanceMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                                            Save Advance Amount
-                                        </button>
-                                    </div>
-                                )}
-
                                 <div className="glass-card !bg-white/5 !p-4 space-y-3">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
-                                        <FileSearch className="h-4 w-4" /> Payment Receipt
-                                    </h4>
-                                    <p className="text-xs text-surface-500">
-                                        Open the payment receipt uploaded by the customer for this booking.
-                                    </p>
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400">Payment Receipt</h4>
                                     <button
                                         type="button"
                                         onClick={() => handleOpenPaymentReceipt(getBookingId(selectedBooking))}
@@ -853,61 +611,24 @@ const BookingRequests: React.FC = () => {
                                         <ExternalLink className="h-3.5 w-3.5" /> Open Payment Receipt
                                     </button>
                                 </div>
-
-                                <div className="glass-card !bg-white/5 !p-4 space-y-3">
-                                    <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400 flex items-center gap-2">
-                                        <FileText className="h-4 w-4" /> Uploaded Documents
-                                    </h4>
-
-                                    {!selectedCustomerId ? (
-                                        <p className="text-xs text-surface-500">Customer ID is unavailable for this booking.</p>
-                                    ) : isUserDocumentsLoading ? (
-                                        <p className="text-xs text-surface-500 animate-pulse">Loading user documents...</p>
-                                    ) : userDocumentsError ? (
-                                        <p className="text-xs text-red-300">Unable to load user documents.</p>
-                                    ) : selectedUserDocuments.length === 0 ? (
-                                        <p className="text-xs text-surface-500">No uploaded documents found.</p>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {selectedUserDocuments.map((document) => (
-                                                <div key={document.id} className="flex items-center justify-between bg-surface-900/40 border border-white/5 rounded-xl px-3 py-2">
-                                                    <div className="min-w-0">
-                                                        <div className="text-xs font-semibold text-white truncate">{document.originalFilename || 'Document file'}</div>
-                                                        <div className="text-[10px] text-surface-500 uppercase tracking-wider">
-                                                            {document.category} {document.createdAt ? `• ${toDateTime(document.createdAt)}` : ''}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleOpenUserDocument(document.id)}
-                                                        className="btn-outline !py-1 !px-3 text-[10px] inline-flex items-center gap-1"
-                                                    >
-                                                        <ExternalLink className="h-3.5 w-3.5" /> Open
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
                             </div>
 
                             <div className="p-8 grid grid-cols-2 gap-4 bg-white/5">
                                 <button
-                                        onClick={() => statusFilter === 'RECEIPT_SUBMITTED' ? handleRejectPayment(getBookingId(selectedBooking)) : handleReject(getBookingId(selectedBooking))}
-                                        disabled={!canApproveBooking(selectedBooking, statusFilter) || isAnyMutationPending}
+                                    onClick={() => setSelectedBooking(null)}
                                     className="btn-outline !py-4 flex items-center justify-center gap-2 border-red-500/20 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                                 >
-                                        <XCircle className="h-5 w-5" /> {statusFilter === 'RECEIPT_SUBMITTED' ? 'Reject Payment' : 'Reject'}
+                                    <XCircle className="h-5 w-5" /> Close
                                 </button>
                                 <button
-                                        onClick={() => statusFilter === 'RECEIPT_SUBMITTED'
-                                            ? approvePaymentMutation.mutate(getBookingId(selectedBooking))
-                                            : approveMutation.mutate(getBookingId(selectedBooking))}
-                                        disabled={!canApproveBooking(selectedBooking, statusFilter) || isAnyMutationPending}
+                                    onClick={() => statusFilter === 'RECEIPT_SUBMITTED'
+                                        ? approvePaymentMutation.mutate(getBookingId(selectedBooking))
+                                        : approveMutation.mutate(getBookingId(selectedBooking))}
+                                    disabled={!canApproveBooking(selectedBooking, statusFilter) || isAnyMutationPending}
                                     className="btn-primary !py-4 flex items-center justify-center gap-2 !bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
                                 >
-                                        {(approveMutation.isPending || approvePaymentMutation.isPending) && <Loader2 className="h-5 w-5 animate-spin" />}
-                                        <CheckCircle2 className="h-5 w-5" /> {statusFilter === 'RECEIPT_SUBMITTED' ? 'Approve Payment' : 'Approve'}
+                                    {(approveMutation.isPending || approvePaymentMutation.isPending) && <Loader2 className="h-5 w-5 animate-spin" />}
+                                    <CheckCircle2 className="h-5 w-5" /> {statusFilter === 'RECEIPT_SUBMITTED' ? 'Approve Payment' : 'Approve'}
                                 </button>
                             </div>
                         </motion.div>

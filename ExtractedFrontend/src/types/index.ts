@@ -103,3 +103,19 @@ export interface PaginatedResponse<T> {
 }
 
 export type BookingAdminListResponse = BookingAdminDTO[] | PaginatedResponse<BookingAdminDTO>;
+
+export interface DocumentDto {
+  documentId?: string;
+  documentType: string;
+  originalFilename?: string;
+  uploadedAt?: string;
+  expired: boolean;
+}
+
+export interface AdminBookingDetailsResponse {
+  booking: BookingResponse;
+  customer: User;
+  documents: DocumentDto[];
+}
+
+export type BookingResponse = Booking; // Aliasing existing Booking as BookingResponse for alignment

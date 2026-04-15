@@ -1,5 +1,5 @@
 import api from './api';
-import type { Booking } from '../types';
+import type { Booking, AdminBookingDetailsResponse } from '../types';
 
 export const getMyBookings = async (): Promise<Booking[]> => {
     const response = await api.get<Booking[]>('/bookings/my');
@@ -21,4 +21,9 @@ export const setAdvanceAmount = async (
     advanceCurrency?: string,
 ): Promise<void> => {
     await api.put(`/admin/bookings/${bookingId}/advance-amount`, { advanceAmount, advanceCurrency });
+};
+
+export const getAdminBookingDetails = async (id: string): Promise<AdminBookingDetailsResponse> => {
+    const response = await api.get<AdminBookingDetailsResponse>(`/admin/bookings/${id}/details`);
+    return response.data;
 };
