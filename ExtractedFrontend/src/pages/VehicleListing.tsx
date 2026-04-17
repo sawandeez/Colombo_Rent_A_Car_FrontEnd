@@ -8,7 +8,7 @@ import type { Vehicle } from '../types';
 import { cn, formatPrice } from '../utils';
 
 const VehicleCard: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
-    const isUnavailable = !vehicle.isAvailable || vehicle.isUnderMaintenance || vehicle.isAdminHeld;
+    const isUnavailable = vehicle.isUnderMaintenance;
     const primaryImage = vehicle.imageUrls?.[0] || "https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&q=80&w=800";
 
     return (
@@ -27,13 +27,7 @@ const VehicleCard: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
                     alt={`${vehicle.make} ${vehicle.model}`}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
-                {isUnavailable && (
-                    <div className="absolute inset-0 bg-surface-950/60 backdrop-blur-[2px] flex items-center justify-center">
-                        <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md">
-                            Currently Unavailable
-                        </span>
-                    </div>
-                )}
+                {isUnavailable && <div className="absolute inset-0 bg-surface-950/60 backdrop-blur-[2px]" />}
                 <div className="absolute top-4 left-4">
                     <span className="bg-primary-600/90 backdrop-blur-md text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-widest">
                         {vehicle.type}
@@ -77,7 +71,7 @@ const VehicleCard: React.FC<{ vehicle: Vehicle }> = ({ vehicle }) => {
                 <div className="pt-2 mt-auto">
                     {isUnavailable ? (
                         <button disabled className="w-full btn-outline border-white/5 bg-white/5 text-surface-500">
-                            Not Available
+                            Under Maintenance
                         </button>
                     ) : (
                         <Link to={`/vehicles/${vehicle.id}`} className="w-full btn-primary block text-center">

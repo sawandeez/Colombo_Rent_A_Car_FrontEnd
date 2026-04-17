@@ -274,9 +274,6 @@ const VehicleManagement: React.FC = () => {
                                     {vehicle.isUnderMaintenance && (
                                         <span className="px-2 py-1 bg-orange-500/80 text-white text-[10px] font-bold rounded-lg backdrop-blur-sm">REPAIR</span>
                                     )}
-                                    {vehicle.isAdminHeld && (
-                                        <span className="px-2 py-1 bg-purple-500/80 text-white text-[10px] font-bold rounded-lg backdrop-blur-sm">ADMIN HOLD</span>
-                                    )}
                                 </div>
                             </div>
 
@@ -421,44 +418,17 @@ const VehicleManagement: React.FC = () => {
                                     {formErrors.description && <p className="text-red-400 text-xs">{formErrors.description}</p>}
                                 </div>
 
-                                <div className="col-span-2 flex gap-4 pt-4 leading-normal">
+                                <div className="col-span-2 flex leading-normal">
                                     <label className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl cursor-pointer border border-white/10 hover:border-primary-500/50 flex-grow">
                                         <input
                                             type="checkbox"
-                                            className="w-5 h-5 accent-primary-500"
-                                            checked={form.isAvailable}
-                                            onChange={(e) => handleChange('isAvailable', e.target.checked)}
-                                        />
-                                        <div>
-                                            <p className="text-sm font-bold">Available for Booking</p>
-                                            <p className="text-[10px] text-surface-500">Customer can request this vehicle</p>
-                                        </div>
-                                    </label>
-                                </div>
-
-                                <div className="col-span-2 flex gap-4 leading-normal">
-                                    <label className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl cursor-pointer border border-white/10 hover:border-primary-500/50 flex-grow">
-                                        <input
-                                            type="checkbox"
-                                            className="w-5 h-5 accent-primary-500"
+                                            className="w-5 h-5 accent-black"
                                             checked={form.isUnderMaintenance}
                                             onChange={(e) => handleChange('isUnderMaintenance', e.target.checked)}
                                         />
                                         <div>
                                             <p className="text-sm font-bold">Under Maintenance</p>
                                             <p className="text-[10px] text-surface-500">Hide from customers during repairs</p>
-                                        </div>
-                                    </label>
-                                    <label className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl cursor-pointer border border-white/10 hover:border-primary-500/50 flex-grow">
-                                        <input
-                                            type="checkbox"
-                                            className="w-5 h-5 accent-primary-500"
-                                            checked={form.isAdminHeld}
-                                            onChange={(e) => handleChange('isAdminHeld', e.target.checked)}
-                                        />
-                                        <div>
-                                            <p className="text-sm font-bold">Admin Hold</p>
-                                            <p className="text-[10px] text-surface-500">Temporarily hold without deleting</p>
                                         </div>
                                     </label>
                                 </div>
