@@ -3,12 +3,19 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Car, Mail, Lock, LogIn, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
 import type { UserRole } from '../types';
+import GoogleLoginButton from '../components/auth/GoogleLoginButton';
+import {
+    fetchProfileWithToken,
+    getGoogleAuthStartUrl,
+    resolvePostLoginRoute,
+    setPostLoginRedirect,
+} from '../services/auth';
 
 const loginSchema = z.object({
     email: z.string().email('Invalid email address'),
@@ -19,8 +26,22 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 const Login: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const setAuth = useAuthStore((state) => state.setAuth);
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
+    const [oauthError, setOauthError] = React.useState<string | null>(null);
+    const googleRedirectTriggered = React.useRef(false);
+
+    const fromPath = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname;
+
+    React.useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const errorMessage = params.get('error') || params.get('message');
+        if (errorMessage) {
+            setOauthError(errorMessage);
+        }
+    }, [location.search]);
 
     const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
         resolver: zodResolver(loginSchema),
@@ -28,27 +49,43 @@ const Login: React.FC = () => {
 
     const onSubmit = async (data: LoginForm) => {
         setIsLoading(true);
+        setOauthError(null);
         try {
             const response = await api.post('/auth/login', data);
             const { token, role } = response.data;
 
             // After login, fetch profile to get full user details
-            const profileResponse = await api.get('/profile', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const user = await fetchProfileWithToken(token);
 
-            setAuth(profileResponse.data, token, role as UserRole);
+            setAuth(user, token, role as UserRole);
             toast.success('Welcome back!');
 
-            if (role === 'ADMIN' || role === 'SPECIAL_ADMIN') {
-                navigate('/admin');
-            } else {
-                navigate('/vehicles');
-            }
+            navigate(resolvePostLoginRoute(role, fromPath), { replace: true });
         } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Invalid credentials');
+            const message = error.response?.data?.message || 'Invalid credentials';
+            toast.error(message);
+            setOauthError(message);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleGoogleLogin = () => {
+        if (isGoogleLoading || googleRedirectTriggered.current) return;
+
+        googleRedirectTriggered.current = true;
+        setOauthError(null);
+        setIsGoogleLoading(true);
+
+        const fallbackPath = resolvePostLoginRoute(undefined, fromPath);
+        setPostLoginRedirect(fallbackPath);
+
+        try {
+            window.location.assign(getGoogleAuthStartUrl());
+        } catch {
+            setOauthError('Unable to start Google login. Please try again.');
+            setIsGoogleLoading(false);
+            googleRedirectTriggered.current = false;
         }
     };
 
@@ -78,6 +115,30 @@ const Login: React.FC = () => {
                         </div>
                         <h1 className="text-3xl font-bold">Welcome Back</h1>
                         <p className="text-surface-400">Enter your credentials to access your account</p>
+                    </div>
+
+                    {oauthError && (
+                        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                            {oauthError}
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        <GoogleLoginButton
+                            onClick={handleGoogleLogin}
+                            loading={isGoogleLoading}
+                            disabled={isLoading}
+                        />
+                        <p className="text-center text-xs text-surface-500">Use your Google account for quick access</p>
+                    </div>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-white/10" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-surface-900/40 px-3 text-surface-500">Or continue with email</span>
+                        </div>
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -114,7 +175,7 @@ const Login: React.FC = () => {
 
                         <button
                             type="submit"
-                            disabled={isLoading}
+                            disabled={isLoading || isGoogleLoading}
                             className="btn-primary w-full py-4 flex items-center justify-center space-x-2"
                         >
                             {isLoading ? (
