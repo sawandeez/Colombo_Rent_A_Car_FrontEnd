@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import MainLayout from './components/layout/MainLayout';
@@ -18,7 +18,8 @@ import AuditLogs from './pages/AuditLogs';
 import PaymentSuccess from './pages/PaymentSuccess';
 import PaymentFail from './pages/PaymentFail';
 import UploadReceipt from './pages/UploadReceipt';
-import { useAuthStore } from './store/authStore';
+import GoogleAuthCallback from './pages/GoogleAuthCallback';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,13 +29,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode, allowedRoles?: string[] }) => {
-  const { role, isAuthenticated } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (allowedRoles && role && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
-  return <>{children}</>;
-};
 
 function App() {
   return (
@@ -46,6 +40,7 @@ function App() {
             <Route path="vehicles" element={<VehicleListing />} />
             <Route path="vehicles/:id" element={<VehicleDetails />} />
             <Route path="login" element={<Login />} />
+            <Route path="auth/google/callback" element={<GoogleAuthCallback />} />
             <Route path="register" element={<Register />} />
             <Route path="payment/success" element={<PaymentSuccess />} />
             <Route path="payment/fail" element={<PaymentFail />} />
