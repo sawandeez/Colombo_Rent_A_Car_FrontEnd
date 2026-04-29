@@ -113,7 +113,14 @@ const VehicleListing: React.FC = () => {
         )
         .sort((a, b) => (Number(b.isAvailable) - Number(a.isAvailable))); // Available first
 
-    const types = ['All', ...new Set(vehicles.map(v => v.type))];
+    const typeMap = new Map<string, string>();
+    vehicles.forEach((v) => {
+        const normalizedType = String(v.type ?? '').trim().toLowerCase();
+        if (normalizedType && !typeMap.has(normalizedType)) {
+            typeMap.set(normalizedType, v.type);
+        }
+    });
+    const types = ['All', ...typeMap.values()];
 
     return (
         <div className="min-h-screen pb-20 pt-10">
@@ -151,7 +158,7 @@ const VehicleListing: React.FC = () => {
                                     className={cn(
                                         "px-6 py-3 rounded-xl transition-all whitespace-nowrap text-sm",
                                         filterType === type
-                                            ? "bg-primary-600 text-white shadow-lg shadow-primary-600/20"
+                                            ? "bg-primary-600 text-surface-950 shadow-lg shadow-primary-600/20"
                                             : "bg-surface-900 border border-white/5 text-surface-400 hover:text-white hover:border-white/10"
                                     )}
                                 >
