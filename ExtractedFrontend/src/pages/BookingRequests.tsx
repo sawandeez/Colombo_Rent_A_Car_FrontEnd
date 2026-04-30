@@ -7,6 +7,7 @@ import {
     CheckCircle2,
     Eye,
     ExternalLink,
+    FileText,
     Loader2,
     Search,
     XCircle,
@@ -379,6 +380,19 @@ const BookingRequests: React.FC = () => {
         }
     };
 
+    const handleOpenUserDocument = async (userId: string, documentId: string) => {
+        try {
+            const response = await api.get<Blob>(`/admin/users/${userId}/documents/${documentId}`, {
+                responseType: 'blob',
+            });
+            const objectUrl = URL.createObjectURL(response.data);
+            window.open(objectUrl, '_blank', 'noopener,noreferrer');
+            setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (error) {
+            toast.error(getErrorMessage(error));
+        }
+    };
+
     return (
         <div className="min-h-screen pb-20 pt-10">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 text-left">
@@ -610,6 +624,39 @@ const BookingRequests: React.FC = () => {
                                     >
                                         <ExternalLink className="h-3.5 w-3.5" /> Open Payment Receipt
                                     </button>
+                                </div>
+
+                                <div className="glass-card !bg-white/5 !p-4 space-y-3">
+                                    <h4 className="text-xs font-bold uppercase tracking-wider text-surface-400">Customer Documents</h4>
+                                    {!details ? (
+                                        <p className="text-xs text-surface-500">Loading documents…</p>
+                                    ) : details.documents?.filter((doc) =>
+                                        ['NIC_FRONT', 'DRIVING_LICENSE'].includes(doc.documentType)
+                                    ).length === 0 ? (
+                                        <p className="text-xs text-surface-500">No NIC or driving licence uploaded.</p>
+                                    ) : (
+                                        <div className="flex flex-col gap-2">
+                                            {details.documents
+                                                .filter((doc) => ['NIC_FRONT', 'DRIVING_LICENSE'].includes(doc.documentType))
+                                                .map((doc) => {
+                                                    const customerId = getCustomerId(selectedBooking);
+                                                    const label = doc.documentType === 'NIC_FRONT' ? 'NIC' : 'Driving Licence';
+                                                    return (
+                                                        <button
+                                                            key={doc.documentId}
+                                                            type="button"
+                                                            disabled={doc.expired || !doc.documentId || !customerId}
+                                                            onClick={() => handleOpenUserDocument(customerId, doc.documentId!)}
+                                                            className="btn-outline !py-2 !px-3 text-xs inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        >
+                                                            <FileText className="h-3.5 w-3.5" />
+                                                            {label}
+                                                            {doc.expired && <span className="text-red-400">(expired)</span>}
+                                                        </button>
+                                                    );
+                                                })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
