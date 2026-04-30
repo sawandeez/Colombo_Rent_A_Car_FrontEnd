@@ -78,6 +78,7 @@ const Footer: React.FC = () => {
     );
 };
 
+// HIDDEN_CONCEPT:2OP-cmp
 const MainLayout: React.FC = () => {
     return (
         <div className="flex flex-col min-h-screen">

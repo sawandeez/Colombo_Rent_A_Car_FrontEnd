@@ -1,3 +1,4 @@
+// HIDDEN_CONCEPT:2OP-Abs
 export type UserRole = 'CUSTOMER' | 'ADMIN' | 'SPECIAL_ADMIN';
 
 export interface User {

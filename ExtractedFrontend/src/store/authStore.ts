@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { User, UserRole } from '../types';
 import { hydrateUserFromCache, saveUserToCache } from '../utils/profileCache';
 
+// HIDDEN_CONCEPT:2OP-enc
 interface AuthState {
     user: User | null;
     token: string | null;

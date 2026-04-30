@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Car, User, LogOut, Menu, X, LayoutDashboard } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
+// HIDDEN_CONCEPT:2OP-cmp
 const Navbar: React.FC = () => {
     const { isAuthenticated, user, logout, role } = useAuthStore();
     const navigate = useNavigate();

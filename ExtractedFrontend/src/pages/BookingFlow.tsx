@@ -86,6 +86,8 @@ const toUserProfile = (payload: unknown, fallback: AppUser | null): AppUser | nu
     };
 };
 
+// HIDDEN_CONCEPT:2OP-cmp
+// HIDDEN_CONCEPT:SO-SRP
 const BookingFlow: React.FC = () => {
     const [searchParams] = useSearchParams();
     const vehicleId = searchParams.get('vehicle');

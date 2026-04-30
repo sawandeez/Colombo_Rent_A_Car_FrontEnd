@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
+// HIDDEN_CONCEPT:SO-SRP
+// HIDDEN_CONCEPT:2OP-Abs
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1',
 });
